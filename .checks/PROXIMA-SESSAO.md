@@ -1,5 +1,17 @@
 # Próxima sessão — depois da retomada T20
 
+## Piloto — atualização vigente09/11 02:50UTC
+
+**Retomada em09/11 autorizada pelo usuário:** permitir revalidação normal somente leitura de Git e arquivos elegíveis em Worklog/Posicionadas para replay/exportação. Continua proibida escrita nos projetos, leitura de transcrições/credenciais ou reinício/interrupção de serviços. Provas da rodada2 e comparação PDF rótulo→valor serão reexecutadas; preservar FAIL inicial, sem reduzir checks ou fechar T24 por autorização de leitura.
+
+**Auditoria posterior:** provas seguras receberam FAIL independente,0/7 operacionalmente comprovados; gates técnicos201/33/30 verdes. Revalidação normal de exportação/replay consulta Git/arquivos das roots reais, além da cópia, contrariando a fronteira prometida. Resultados do autor não equivalem a aceite. Execução pausada para decisão de autorização de leitura, sem reduzir checks nem fechar T24. Ver `.checks/t24-safe-acceptance.verified.md` e seção final do checklist.
+
+T14/PR real T18 constam como conferidos no registro concorrente `.checks/piloto-t14-t24-2026-11-09.md`; T15 permanece encerrada no aceite disponível/comprovado. Agora há captura OpenCode real **nos dois projetos**, inclusive nova sessão Posicionadas23:39BRT. Provas operacionais sem interrupção em `.checks/t24-safe-acceptance.md`: backup/restauração pessoal isolada, fila real/replay0, relatórios filtrados e ajuste/undo **só no clone**. Código de produção não mudou. T24 segue aberta para cenários físicos/SSH autorizados, dedicação humana conferida, cadeia de evidências real, inspeção visual/ajuste pessoal e medição final. Não repetir instalação/trust ou declarar crescimento diário a partir do delta parcial. `docs/PILOTO.md` contém o resumo vigente; as pendências genéricas dos relatos/tabelas antigos abaixo não substituem esse resumo.
+
+## Ampliação histórica posterior — 09/11/2026
+
+T15 continua concluída no aceite disponível/comprovado, não integral. Nova rodada `.checks/history-expansion.md`: gaps públicos OpenCode2.2.6 aceitos com aviso/partial e opt-in `codex-rollout-v4-0.167.0` para MCP completed + FunctionCall canônico correlacionado. Novas capacidades provadas apenas por contrato/fixtures; nenhuma nova leitura pessoal/modelo/instrumentação. Matriz vigente e contratos em `docs/HISTORICO-CONTRATOS.md`. Logs só com log.synced continuam indisponíveis. Nested/forks/revert/prefixos externos e Claude nativo continuam não suportados, com bloqueios explícitos de identidade/tempo/parentesco; não são dados fabricados ou capacidades concluídas. Sem commits autorizados nesta rodada. Resultados/verificação independente registrados no checklist/relatório próprios, não nos relatórios anteriores preservados. As notas abaixo registram os estados anteriores e os aceites do piloto podem ter alterações concorrentes em TASKS.md.
+
 Atualizado em **08/11/2026**. O pedido de continuar com `/tlc-implement` retomou T20 e a verificação adiadas em 07/11. Os avisos de adiamento nos registros históricos não representam mais o estado vigente.
 
 **Estado final vigente:** T12 CLI aceita em uso real; **T15 concluída** no aceite explícito do usuário **Disponível e comprovado**, **verificação independente PASS 4/4**, perfil light, em `.checks/t15-fechamento.verified.md`. Recuperação real Codex10/replay0, OpenCode legado46/replay0; limitações nativas mantidas, não cobertura integral. Commits locais autorizados `fa121cc` e `b162071`, sem push. Os parágrafos cronológicos abaixo conservam o histórico anterior a esse fechamento.

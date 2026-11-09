@@ -1,5 +1,9 @@
 # Fontes, perfis e histórico — T14/T15
 
+## Ampliação posterior — 09/11/2026
+
+O aceite T15 abaixo permanece preservado. Nova cobertura **somente por contrato/fixtures**: `opencode-log-v1` aceita gaps públicos de **2.2.6**, com `HISTORY_PUBLIC_LOG_GAPS`/complete=false; novo opt-in `codex-rollout-v4-0.167.0` importa MCP completed apenas com FunctionCall canônico namespaced de mesmo call_id. V1/v2/v3 não foram ampliados silenciosamente. Nenhuma nova amostra pessoal lida. Matriz das quatro classes, fontes fixadas e limites em [HISTORICO-CONTRATOS.md](HISTORICO-CONTRATOS.md); checklist `.checks/history-expansion.md`. Relatos anteriores de MCP/gaps não suportados descrevem aquele momento, não apagam esta ampliação nem constituem prova nativa nova.
+
 ## Aceite vigente da T15 — disponível e comprovado
 
 Em 08/11/2026 o usuário aprovou explicitamente o fechamento pelo **histórico disponível e comprovado**, com lacunas visíveis, em vez de exigir cobertura nativa integral. **T15 concluída nesse aceite, com verificação independente PASS 4/4**, perfil light, em `.checks/t15-fechamento.verified.md`. O verificador reexecutou a recuperação real Codex, oito testes focados e typecheck; nenhum gap bloqueante no escopo acordado. Commits locais `fa121cc` e `b162071`, sem push.
@@ -50,6 +54,7 @@ O filtro **Fonte / perfil** participa de sessões, atividade, totais e relatóri
 | `codex-rollout-0.167.0` | JSONL nativo 0.167.0 escolhido explicitamente; lifecycle de turnos de thread raiz, sem forks/contexto herdado, com horários de execução explícitos; resultado parcial obrigatório |
 | `codex-rollout-v2-0.167.0` | Opt-in separado: turnos raiz + `CommandExecution`/`FileChange` completed paginados e filhos diretos comprovados; ignora prefixo herdado e mantém resultado parcial |
 | `codex-rollout-v3-0.167.0` | Opt-in separado: cobertura v2 + `DynamicToolCall` completed/success=true paginado; nomes canônicos/call_id compartilhados com hooks, horários explícitos; parcial |
+| `codex-rollout-v4-0.167.0` | Opt-in separado: v3 + MCP completed com FunctionCall namespaced próprio de mesmo call_id; nome canônico preservado, nunca deduzido de server/tool; parcial |
 | `opencode-db-1.19.5` | Banco legado somente leitura, schema e versão conferidos; projeta apenas IDs, estados e tempos de sessões/mensagens/ferramentas autorizadas |
 | `opencode-log-v1` | Log durável nativo SSE de sessão OpenCode 2.2.5/2.2.6, envelope `durable.version=1`; mesmos IDs/projetor do plugin, contexto de ferramenta e origem preservados |
 | `git-v1` | Para uma fonte Git registrada internamente, reutiliza a indexação existente em lotes; no uso diário, `npm run cli -- collect` já indexa as raízes Git autorizadas sem exigir fonte manual. Git indexa objetos do repositório e a consulta/relatório aplica o período, sem gerar horas |
@@ -155,7 +160,7 @@ npm run cli -- history import --source-id UUID --from '2026-11-06T00:00:00.000Z'
 ```
 
 - Fonte deve ser OpenCode da instalação local, habilitada, com versão **2.2.5 ou 2.2.6**, igual à versão original declarada em `session.created.data.version`. Não mudar a versão de uma fonte coletora apenas para aceitar o arquivo.
-- Input exige início da sessão (`session.created`), identidade consistente e sequência durável contínua; cada envelope tem `durable.version=1`. `log.synced` precisa confirmar a última sequência. Log iniciado no meio, truncado, desconhecido ou com watermark divergente não tem `complete=true`.
+- Input exige início da sessão (`session.created`), identidade consistente, IDs únicos e sequência durável crescente; cada envelope tem `durable.version=1`. Em **2.2.5** a sequência continua contígua e marcador igual à última sequência. Em **2.2.6** gaps públicos internos/finais são aceitos com `HISTORY_PUBLIC_LOG_GAPS`/complete=false; `log.synced.seq` deve ser inteiro >= último seq e ter mesma identidade. Isso não autentica se um frame público foi removido manualmente. Log iniciado no meio, truncado ou desconhecido continua recusado.
 - Autoriza a raiz antes de projetar os demais eventos; mudança de diretório reaplica autorização. Não cadastra automaticamente pastas trazidas pelo histórico. Roots pausadas/externas e fontes pausadas continuam negadas.
 - Captura do arquivo SSE pode conter dados privados da ferramenta; o importador preserva somente a projeção permitida. Prompts/args/resultados não entram no banco Worklog, warnings, revisões ou relatórios.
 - IDs usam o mesmo `normalizeEvent`/`projectV2Event` do plugin. Replay e sobreposição ao vivo não duplicam eventos; caminhos são canonicalizados pela política compartilhada, incluindo aliases por symlink.
@@ -163,6 +168,8 @@ npm run cli -- history import --source-id UUID --from '2026-11-06T00:00:00.000Z'
 - Limites: **64 MiB por arquivo, 1 MiB por frame SSE e 10000 frames de dados**. Symlink de input recusado; leitura de snapshot detecta mudança de tamanho/mtime durante a leitura.
 - Retomada relê o log desde o início para reconstruir contexto/nome das ferramentas e pula IDs já persistidos. O limite por inserções da CLI permanece; nenhum offset cego perde o contexto. Custo é linear no log delimitado.
 - `complete` confirma consumo do input disponível até seu watermark, não toda a história de uma ferramenta. Log contendo apenas `log.synced` retorna **`HISTORY_UNAVAILABLE`, complete=false**.
+
+Correção do teste de watermark aprovada explicitamente pelo usuário nesta ampliação: watermark superior não é corrupção em2.2.6; a prova negativa usa marcador regressivo e novas provas positivas/negativas cobrem gaps e integridade. A limitação a contíguos mencionada no relato do fechamento anterior foi ampliada apenas para2.2.6, sem reescrever o aceite anterior. Não há marca-d'água visual; watermark é posição técnica.
 
 ### Prova real delimitada da continuação
 

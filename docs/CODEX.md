@@ -1,5 +1,11 @@
 # Codex — integração local T12
 
+## Ampliação histórica posterior — 09/11/2026
+
+Novo opt-in `codex-rollout-v4-0.167.0`: recortes v3 + MCP completed correlacionado pelo call_id com `response_item.function_call` namespaced próprio, cujo nome canônico corresponde ao dispatcher/hook; exige adicionalmente history_base ausente/null na raiz e no filho. Sem par, `HISTORY_MCP_IDENTITY_UNAVAILABLE`; nunca concatenar nomes MCP brutos server/tool. Primeiro recibo/horário durável, privacidade e conflitos são preservados; parcial/exit1 sempre. Provas **apenas contratuais/fixtures**, sem novo ensaio nativo ou reinstalação de hooks.
+
+Linhagens adicionais investigadas, mas **ainda não suportadas**: raiz, pai imediato e prefixo físico/lógico são distintos; hooks não expõem pai imediato e o normalizador/projeção atuais atribuem a raiz. Não achatar aninhados nem reescrever eventos/recibos imutáveis. Resume simples reutiliza IDs; fork/revert/páginas externas não são declarados suportados. Matriz e contratos oficiais fixados em [HISTORICO-CONTRATOS.md](HISTORICO-CONTRATOS.md). O fechamento T15 disponível/comprovado permanece; parágrafos anteriores abaixo são cronológicos.
+
 Implementação em 06/11/2026. Contrato validado: **Codex CLI 0.167.0** (a instalação passou de 0.166.0, inventariada em T01, para 0.167.0). Outras versões são recusadas até revalidação. O aplicativo desktop não foi encontrado nos paths inventariados; não foi marcado como ativo.
 
 ## Estado

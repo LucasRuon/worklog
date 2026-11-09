@@ -1,5 +1,23 @@
 # Piloto completo — estado pendente
 
+## Estado vigente — provas seguras em09/11/2026
+
+**Retomada autorizada:** usuário aprovou explicitamente a revalidação normal de leitura Git/arquivos elegíveis nos dois projetos após a pausa de auditoria. Store/ledger pessoal seguem somente leitura e ajustes só no clone, sem modelos, transcrições, credenciais, reinstalação ou reinício de serviços. A rodada2 reexecutará a prova com comparação PDF rótulo→valor corrigida; FAIL inicial e fronteira anterior continuam documentados, sem apagar evidências ou alterar os checks. T24 não é encerrada por essa autorização.
+
+**Atualização de auditoria:** rodada independente1 em `.checks/t24-safe-acceptance.verified.md` retornou FAIL,0/7 operacionalmente comprovados: o script pode consultar Git/arquivos das roots reais via validadores existentes, contrariando o isolamento de leitura prometido. Os resultados do autor abaixo são cronológicos, não aceite independente. Gates técnicos201/33/30/typecheck/build foram reexecutados e passaram. Novas execuções operacionais desse caminho estão pausadas até autorização explícita para revalidação de leitura normal ou outra solução compatível com a fronteira; nenhum check foi enfraquecido. T24 permanece aberta.
+
+**T24 continua aberta; não é preciso reiniciar o uso já observado.** Worklog e Posicionadas têm atividade real e agora ambos têm captura OpenCode comprovada. A sessão Posicionadas `ses_e41d38cbcffeHUOj6Xr0bYJFdq`, criada08/11 23:39BRT, foi recebida com28 eventos às23:39:37 (contagens posteriores cresceram). As sessões Posicionadas anteriores não receberam recuperação histórica por suposição. Codex mínimo nos dois projetos e PR#1 real já foram comprovados; não reinstalar/confiar novamente por causa dos roteiros cronológicos abaixo.
+
+Prova opt-in `node scripts/verify-pilot-safe.mjs` em09/11 02:50UTC usou origem pessoal **readOnly** e backup/restore novos privados, sem coletores/servidores na cópia. Snapshot7156 eventos/42 sessões e11 recibos: hashes/identidade/contagens preservados; fila real recuperou1 evento e replay0. CSV/PDF de só Worklog ou só Posicionadas, com período/máquina, foram gerados e lidos por parser, com os mesmos valores da prévia. Nota/ajuste30000ms/compensação ocorreram **somente na cópia**, sem declarar dedicação fictícia na origem. Isso não comprova edição pessoal de nota/ajuste, inspeção visual ou fechamento da cadeia real de evidências.
+
+Execução simultânea entre projetos observada:2979ms de sobreposição nesse snapshot. Não comprova simultaneidade de dedicação humana; a janela selecionada não tinha sinal humano e estimativa0 é intencional. Launchd rodando, health200, sync macmini recente sem erro; último evento Claude remoto continua07/11. Baseline vigente do piloto145495130 bytes; medição02:50UTC147668188, delta2173058, **não crescimento de um dia**.
+
+Checklist `.checks/t24-safe-acceptance.md`, relatório independente `.checks/t24-safe-acceptance.verified.md` após conferência e resultado local ignorado pelo Git `artifacts/t24-safe/results.json`. Backup/restore/PDF/CSV reais ficam em diretório privado temporário apontado no resultado, fora das roots. O script lê dados reais e gera backups privados: **não executar automaticamente como regressão**. Não lê transcrições ou inicia modelos.
+
+Faltam: bloqueio/suspensão físicos, terminal fechado, falha/reconexão SSH real autorizada, conferência da dedicação humana, cadeia real arquivo→revisão→sessão→commit→PR, PDF visual/nota/ajuste pessoais e medição final do período acordado. Essas ações não foram presumidas autorizadas só por iniciar as provas seguras. A janela de24h registrada na conferência é procedimento de observação, não limitação técnica nem tradução obrigatória de “um dia de uso”; qualquer mudança de aceite precisa ser explícita, sem retroagir baseline/medição.
+
+Os registros abaixo são cronológicos: estados antigos de PR ausente, confiança Codex ou captura pós-recarga pendentes foram superados pelas provas posteriores.
+
 **T24 não concluída.** T20 retomada e verificação independente técnica concluídas em 08/11/2026: **PASS, 33/33 checks**. `tests/e2e/full-flow.spec.ts` passou em desktop/mobile: seleção → evidências → ajuste → CSV/PDF → backup/restore. É um ensaio controlado; não comprova um dia de uso real.
 
 ## Pré-requisitos da próxima sessão
