@@ -43,6 +43,8 @@ T01 disponibilizou os comandos `npm run typecheck`, `npm run test:unit -- <camin
 
 ## Índice do backlog
 
+**Estado vigente após fechamento:** T12 CLI validada com captura real nos dois projetos (PASS 3/3); **T15 concluída no aceite explícito "disponível e comprovado"**, com verificação independente **PASS 4/4** em `.checks/t15-fechamento.verified.md`. Gates gerais reconfirmados antes do commit: **158 unitários, 32 integração e 30 E2E**, typecheck/build verdes. Commits locais autorizados `fa121cc` (implementação) e `b162071` (prova real de recuperação); sem push. Permanecem os demais aceites de perfis pessoais, PR real e piloto T24. Os parágrafos cronológicos abaixo registram estados anteriores.
+
 **Estado em 08/11:** T20 retomada e implementada; verificação independente de T14/T15/T18–T23 **PASS, 33/33 checks** no perfil light. Gates: **46 unitários, 25 integração e 28 E2E**, typecheck/build verdes; full-flow controlado desktop/mobile executado. T12 real, parsers históricos nativos restantes, conferência de perfis pessoais, PR real no piloto e T24 continuam com pendências explícitas. Relatório: `.checks/continuacao.verified.md`. Guias: [FONTES-HISTORICO.md](docs/FONTES-HISTORICO.md), [PRS-RESUMOS.md](docs/PRS-RESUMOS.md), [RELATORIOS-AJUSTES-RECUPERACAO.md](docs/RELATORIOS-AJUSTES-RECUPERACAO.md). Próximas ações: `.checks/PROXIMA-SESSAO.md`.
 
 **Continuação T15:** log durável OpenCode v2 (`opencode-log-v1`) implementado, **7/7 checks independentes**; gates daquela extensão **50/26/28 testes**. Fonte real v2 consultada sem eventos recuperáveis: `HISTORY_UNAVAILABLE`, sem alegar piloto positivo. Runtime instalado observado em **2.2.6**; suporte live entregue na revisão T13 abaixo, sem atualização da instrumentação pessoal.
@@ -311,7 +313,7 @@ T06–T08 foram inicialmente verificadas com fixtures e depois demonstradas com 
 
 ### T15 — Importação do histórico disponível
 
-**Fechamento no aceite escolhido pelo usuário (08/11):** histórico **disponível e comprovado**, com limitações explícitas; não cobertura nativa integral. Recuperação real adicional: dez recibos Codex de Worklog/Posicionadas com identidade/horários originais, replay zero após reabertura e zero dedicação/revisões fabricadas. Histórico nativo legado OpenCode reconferido: 46/46 IDs, replay zero. Checklist `.checks/t15-fechamento.md`; implementação/provas prontas, aguardando verificação independente do fechamento. Ampliações de formatos sem contrato não serão declaradas implementadas.
+**Concluída no aceite escolhido pelo usuário (08/11):** histórico **disponível e comprovado**, com limitações explícitas; não cobertura nativa integral. Recuperação real adicional: dez recibos Codex de Worklog/Posicionadas com identidade/horários originais, replay zero após reabertura e zero dedicação/revisões fabricadas. Histórico nativo legado OpenCode reconferido: 46/46 IDs, replay zero. **Verificação independente PASS 4/4**, perfil light, em `.checks/t15-fechamento.verified.md`; oito testes focados e typecheck aprovados pelo verificador. Ampliações de formatos sem contrato não são declaradas implementadas.
 
 **Arquivos:** criar `src/collectors/history.ts`, `tests/collectors/history.test.ts`; ampliar `src/cli/index.ts`.
 
@@ -493,4 +495,4 @@ XLSX nativo, síntese opcional por LLM, painel em nuvem, equipes e faturamento p
 - Contratos: eventos e filtros definidos em `ARQUITETURA.md`; T02 completa tipos compartilhados antes dos adapters.
 - Dependências: índice sem ciclos; M1 chega a uma entrega utilizável antes das integrações remotas.
 - Revisão de risco: os cinco casos em Review Focus têm tarefas e validações explícitas.
-- Estado: M1/automação preservados; T20 retomada e T14/T15/T18–T23 com verificação independente PASS, 33/33 checks no perfil light. T24 real, captura Codex/PR real, conferência de perfis e parsers restantes continuam pendentes. Evidências em `docs/PROGRESSO.md`, `.checks/continuacao.verified.md` e `.checks/PROXIMA-SESSAO.md`; alterações sem commit/redeploy.
+- Estado vigente: T12 CLI validada em uso real e T15 concluída no aceite disponível/comprovado, PASS independente 4/4. Cobertura nativa adicional permanece limitação documentada, não suporte presumido. PR real, demais perfis pessoais e T24 continuam pendentes. Implementação e prova de recuperação commitadas localmente com autorização; sem push/redeploy externo. Evidências em `.checks/t15-fechamento.verified.md` e `.checks/PROXIMA-SESSAO.md`.

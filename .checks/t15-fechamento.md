@@ -54,4 +54,4 @@ S1+S2 ~43k de leitura, um lote abaixo de 150k. Verificador independente após ú
 - Typecheck aprovado. Antes do commit base fa121cc, regressão completa 158 unitários/32 integração/30 E2E e build aprovados; nenhum código do produto foi alterado depois dessa base, apenas prova operacional/documentação.
 - Pesquisa read-only independente fundamentou disponibilidade de logs migrados só com watermark e a limitação atual a logs contíguos. Esta limitação foi acrescentada explicitamente em FONTES-HISTORICO; não se alega suporte integral nem se mudam testes antigos.
 
-Verificador fresco ainda deve executar C1–C4 antes de declarar T15 concluída no aceite negociado.
+**Verificação independente concluída:** PASS C1–C4 (4/4), perfil light, em `.checks/t15-fechamento.verified.md`, executada no commit `b162071`. Smoke real reexecutado: import10/replay0, identidade/projetos/proveniência corretos, origem read-only e hashes preservados; oito testes focados e typecheck aprovados. T15 concluída no aceite negociado. Atualizações posteriores são somente documentação do resultado, sem mudar código/provas/critério.

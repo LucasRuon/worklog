@@ -24,6 +24,8 @@ Os itens abaixo permanecem como roteiro; a escolha dos projetos e a atualizaçã
 
 ## Evidências técnicas já disponíveis
 
+**Fechamento T15:** histórico disponível/comprovado aceito explicitamente pelo usuário e verificado independentemente **PASS 4/4**, perfil light, em `.checks/t15-fechamento.verified.md`. Recuperação real Codex10/replay0 e OpenCode legado46/replay0. Limitações nativas continuam documentadas em FONTES-HISTORICO; T15 não bloqueia mais este piloto por cobertura integral, mas um dia de uso/cenários reais T24 ainda precisa ser executado.
+
 ### Captura pessoal revalidada — 08/11, 22:09 America/Sao_Paulo (09/11 UTC)
 
 `node scripts/verify-opencode-personal-live.mjs` passou: plugin `worklog` active na localização Worklog, fonte original 2.2.6 habilitada e eventos reais associados ao projeto/raiz corretos. Recorte recebido desde `2026-11-09T00:45:00.000Z`: 6 session.start, 6 turn.submit, 72 turn.start, 72 turn.end, 154 tool.start e 154 tool.end na consulta de 01:09 UTC. Contagens podem crescer; não são medição de duração/dedicação.

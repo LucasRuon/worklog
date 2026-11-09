@@ -2,7 +2,7 @@
 
 ## Aceite vigente da T15 — disponível e comprovado
 
-Em 08/11/2026 o usuário aprovou explicitamente o fechamento pelo **histórico disponível e comprovado**, com lacunas visíveis, em vez de exigir cobertura nativa integral. A implementação dos importadores e a prova real de recuperação desse escopo estão prontas; verificação independente do fechamento pendente em `.checks/t15-fechamento.md`.
+Em 08/11/2026 o usuário aprovou explicitamente o fechamento pelo **histórico disponível e comprovado**, com lacunas visíveis, em vez de exigir cobertura nativa integral. **T15 concluída nesse aceite, com verificação independente PASS 4/4**, perfil light, em `.checks/t15-fechamento.verified.md`. O verificador reexecutou a recuperação real Codex, oito testes focados e typecheck; nenhum gap bloqueante no escopo acordado. Commits locais `fa121cc` e `b162071`, sem push.
 
 - **Codex real recuperado:** `npm exec -- tsx scripts/smoke-codex-recovery.ts` lê somente os dez recibos filtrados de duas sessões de teste próprias (Worklog/Posicionadas). Recuperou **10/10 eventos**, replay após reabrir o store **zero**, duas sessões importadas/projetos corretos, seleção de um projeto retorna uma sessão, zero dedicação humana/revisões. Origem aberta read-only e hashes dos recibos originais inalterados. sourceId/installationId/eventId/horários preservados em store isolado, sem serviço ativo da identidade restaurada. Evidência local `artifacts/t15-recovery/codex-receipts.json`.
 - **OpenCode nativo legado reconferido:** parser `opencode-db-1.19.5`, período 06/11 13:55–14:05 UTC: **46/46 IDs**, replay zero, resumo com 46 referências, zero sinais humanos/revisões. O ensaio usa origem somente leitura e destino temporário.
