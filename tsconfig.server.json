@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "sourceMap": true },
+  "include": ["src/cli", "src/core", "src/server", "src/collectors", "src/remote"]
+}

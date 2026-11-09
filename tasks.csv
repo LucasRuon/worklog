@@ -1,25 +1,25 @@
 ﻿ID;Tarefa;Marco;Prioridade;Dependencias;Status;Arquivo;Ancora
-T01;Base executável e inventário de compatibilidade;M1;P0;;Pendente;TASKS.md;t01
-T02;Eventos, SQLite e idempotência;M1;P0;T01;Pendente;TASKS.md;t02
-T03;Projetos, repositórios e raízes;M1;P0;T02;Pendente;TASKS.md;t03
-T04;Política de captura e normalização;M1;P0;T02,T03;Pendente;TASKS.md;t04
-T05;Coletor local do Claude Code;M1;P0;T04;Pendente;TASKS.md;t05
-T06;Reconstrução de sessões;M1;P0;T05;Pendente;TASKS.md;t06
-T07;Dedicação, execução e sobreposições;M1;P0;T06;Pendente;TASKS.md;t07
-T08;Primeiro painel com dados reais;M1;P0;T03,T06,T07;Pendente;TASKS.md;t08
-T09;Histórico de commits Git;M2;P1;T03,T04;Pendente;TASKS.md;t09
-T10;Histórico de mudanças nos arquivos;M2;P1;T04,T09;Pendente;TASKS.md;t10
-T11;Revisões, diffs e relações com sessões;M2;P1;T06,T09,T10;Pendente;TASKS.md;t11
-T12;Integração local do Codex;M3;P1;T04,T06;Pendente;TASKS.md;t12
-T13;Integração local do OpenCode;M3;P1;T04,T06;Pendente;TASKS.md;t13
-T14;Fontes, perfis e múltiplas contas;M3;P1;T05,T08,T12,T13;Pendente;TASKS.md;t14
-T15;Importação do histórico disponível;M3;P1;T09,T12,T13,T14;Pendente;TASKS.md;t15
-T16;Coletor e sincronização SSH no Mac mini;M4;P1;T02,T03,T05,T07,T14;Pendente;TASKS.md;t16
-T17;Execução contínua nas duas máquinas;M4;P1;T16;Pendente;TASKS.md;t17
-T18;PRs, revisões e verificações;M5;P1;T03,T09,T14;Pendente;TASKS.md;t18
-T19;Resumos de trabalho com evidências;M5;P1;T06,T11,T18;Pendente;TASKS.md;t19
-T20;Painel completo e navegação das evidências;M5;P1;T08,T11,T14,T16,T18,T19;Pendente;TASKS.md;t20
-T21;Exportação por projetos e período;M6;P1;T20;Pendente;TASKS.md;t21
-T22;Notas e ajustes auditáveis de tempo;M6;P1;T07,T20,T21;Pendente;TASKS.md;t22
-T23;Configurações, retenção e recuperação;M6;P2;T10,T16,T17,T22;Pendente;TASKS.md;t23
-T24;Piloto completo e entrega do primeiro produto;M6;P2;T15,T17,T18,T21,T22,T23;Pendente;TASKS.md;t24
+T01;Base executável e inventário de compatibilidade;M1;P0;;Validada com piloto Worklog;TASKS.md;t01
+T02;Eventos, SQLite e idempotência;M1;P0;T01;Implementada e validada;TASKS.md;t02
+T03;Projetos, repositórios e raízes;M1;P0;T02;Implementada e validada;TASKS.md;t03
+T04;Política de captura e normalização;M1;P0;T02,T03;Implementada e validada;TASKS.md;t04
+T05;Coletor local do Claude Code;M1;P0;T04;Adapter validado nativamente no macmini 2.1.319;TASKS.md;t05
+T06;Reconstrução de sessões;M1;P0;T05;Implementada e validada;TASKS.md;t06
+T07;Dedicação, execução e sobreposições;M1;P0;T06;Implementada e validada;TASKS.md;t07
+T08;Primeiro painel com dados reais;M1;P0;T03,T06,T07;M1 validado via OpenCode;TASKS.md;t08
+T09;Histórico de commits Git;M2;P1;T03,T04;Implementada e validada - coletor remoto atualizado;TASKS.md;t09
+T10;Histórico de mudanças nos arquivos;M2;P1;T04,T09;Implementada e validada - captura local e protocolo remoto;TASKS.md;t10
+T11;Revisões, diffs e relações com sessões;M2;P1;T06,T09,T10;Implementada e validada - evidências e navegação desktop/mobile;TASKS.md;t11
+T12;Integração local do Codex;M3;P1;T04,T06;CLI 0.167.0 implementada e captura real Worklog/Posicionadas validada - verificação independente PASS 3/3 - instrumentação somente local;TASKS.md;t12
+T13;Integração local do OpenCode;M3;P1;T04,T06;Suporte 2.2.5/2.2.6 verificado e instalação pessoal atualizada - captura real Worklog confirmada;TASKS.md;t13
+T14;Fontes, perfis e múltiplas contas;M3;P1;T05,T08,T12,T13;Verificação independente PASS - conferência de perfis pessoais pendente;TASKS.md;t14
+T15;Importação do histórico disponível;M3;P1;T09,T12,T13,T14;Concluída no aceite disponível e comprovado - verificação independente PASS 4/4 - Codex real 10/replay0 e OpenCode legado 46/replay0 - limitações nativas explícitas;TASKS.md;t15
+T16;Coletor e sincronização SSH no Mac mini;M4;P1;T02,T03,T05,T07,T14;Instalada e validada;TASKS.md;t16
+T17;Execução contínua nas duas máquinas;M4;P1;T16;Instalada e validada;TASKS.md;t17
+T18;PRs, revisões e verificações;M5;P1;T03,T09,T14;Backend verificado independentemente - conferência de PR real pendente;TASKS.md;t18
+T19;Resumos de trabalho com evidências;M5;P1;T06,T11,T18;Implementada - verificação independente PASS;TASKS.md;t19
+T20;Painel completo e navegação das evidências;M5;P1;T08,T11,T14,T16,T18,T19;Implementada e verificada em 08/11 - desktop/mobile filtros navegação e recuperação;TASKS.md;t20
+T21;Exportação por projetos e período;M6;P1;T20;Implementada - verificação independente PASS - revogação HTTP 410 comprovada;TASKS.md;t21
+T22;Notas e ajustes auditáveis de tempo;M6;P1;T07,T20,T21;Implementada - verificação independente PASS - conflitos HTTP 409 comprovados;TASKS.md;t22
+T23;Configurações, retenção e recuperação;M6;P2;T10,T16,T17,T22;Verificação independente PASS - confirmação operacional prolongada em T24;TASKS.md;t23
+T24;Piloto completo e entrega do primeiro produto;M6;P2;T15,T17,T18,T21,T22,T23;Fluxo controlado verificado - piloto real de um dia e entrega final pendentes;TASKS.md;t24

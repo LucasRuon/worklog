@@ -1,0 +1,68 @@
+import { execFile } from 'node:child_process';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
+import { parseArgs, promisify } from 'node:util';
+import { chromium } from '@playwright/test';
+import { createApp, closeApp } from '../src/server/index.js';
+import { defaultDataDir } from '../src/core/context.js';
+import { registerProjectRoot } from '../src/core/projects.js';
+import { connectOpenCode, supportedOpenCodeVersion } from '../src/collectors/opencode.js';
+import { synchronize } from '../src/server/routes.js';
+
+const { values } = parseArgs({ options: { 'data-dir': { type: 'string' }, root: { type: 'string' }, database: { type: 'string' }, session: { type: 'string' }, output: { type: 'string' } } });
+const execute = promisify(execFile);
+const version = (await execute('opencode', ['--version'], { timeout: 10_000, maxBuffer: 4096 })).stdout.trim();
+if (version !== supportedOpenCodeVersion) throw new Error('OPENCODE_VERSION_UNSUPPORTED');
+const root = resolve(values.root ?? process.cwd());
+const dataDir = resolve(values['data-dir'] ?? process.env.WORKLOG_DATA_DIR ?? defaultDataDir());
+const output = resolve(values.output ?? 'artifacts/m1-live');
+const databasePath = resolve(values.database ?? (await execute('opencode', ['db', 'path'], { timeout: 10_000, maxBuffer: 4096 })).stdout.trim());
+const app = await createApp({ dataDir, port: 0 });
+let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+try {
+  browser = await chromium.launch();
+  const projectId = registerProjectRoot(app, { projectName: 'Worklog', path: root, deviceId: app.config.deviceId });
+  const connection = connectOpenCode(app, { databasePath, rootPath: root, sessionId: values.session, profile: 'sessao-local' });
+  let capture = synchronize(app, { forceObservers: true });
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (capture.observers.some((observer) => observer.status === 'error')) throw new Error('OPENCODE_OBSERVATION_FAILED');
+    const state = JSON.parse(app.db.get<{ value: string }>('SELECT value FROM settings WHERE key = ?', `opencodeObserver:${connection.sourceId}`)!.value) as { messages: { after: unknown }; parts: { after: unknown } };
+    if (!capture.pending && !state.messages.after && !state.parts.after) break;
+    capture = synchronize(app, { forceObservers: true });
+  }
+  const token = (await readFile(join(dataDir, 'bootstrap.token'), 'utf8')).trim();
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'pt-BR' });
+  const authenticated = await context.request.post(`${app.config.origin}/api/auth/bootstrap`, { headers: { Authorization: `Bearer ${token}` } });
+  if (authenticated.status() !== 204) throw new Error('WORKLOG_BOOTSTRAP_FAILED');
+  const page = await context.newPage(); const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.name));
+  const from = new Date(Date.parse(connection.from) - 1).toISOString(); const to = new Date().toISOString();
+  const filter = new URLSearchParams({ from, to, timezone: 'America/Sao_Paulo', projectIds: projectId, tools: 'opencode' });
+  const summaryResponse = await context.request.get(`${app.config.origin}/api/summary?${filter}`);
+  const summary = await summaryResponse.json() as { activityCount: number; sessionCount: number; summary: { humanSignalCount: number; humanEstimatedMs: number; agentAccumulatedMs: number } };
+  if (!summaryResponse.ok() || summary.activityCount < 1 || summary.sessionCount < 1 || summary.summary.humanSignalCount !== 0 || summary.summary.humanEstimatedMs !== 0) throw new Error('WORKLOG_REAL_DATA_MISSING');
+  await page.goto(app.config.origin);
+  await page.getByRole('button', { name: `Abrir sessão ${connection.sessionId}`, exact: true }).waitFor();
+  await mkdir(output, { recursive: true });
+  await page.screenshot({ path: join(output, 'overview.png'), fullPage: true });
+  await page.getByRole('button', { name: `Abrir sessão ${connection.sessionId}`, exact: true }).click();
+  await page.getByRole('dialog').getByText(connection.sessionId, { exact: true }).waitFor();
+  await page.screenshot({ path: join(output, 'session.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Fechar detalhes' }).click();
+  await page.goto(`${app.config.origin}/?view=integrations`);
+  await page.getByRole('heading', { name: 'Fontes registradas' }).waitFor();
+  const source = page.getByRole('row').filter({ hasText: 'opencode' }).filter({ hasText: 'sessao-local' });
+  await source.getByText('Eventos recebidos', { exact: true }).waitFor();
+  await page.screenshot({ path: join(output, 'integrations.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(app.config.origin);
+  await page.getByRole('button', { name: `Abrir sessão ${connection.sessionId}`, exact: true }).waitFor();
+  if (!(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))) throw new Error('MOBILE_OVERFLOW');
+  await page.screenshot({ path: join(output, 'mobile.png'), fullPage: true });
+  if (errors.length) throw new Error('BROWSER_ERRORS');
+  const counts = app.db.all<{ type: string; count: number }>('SELECT type, count(*) AS count FROM events WHERE source_id = ? GROUP BY type ORDER BY type', connection.sourceId);
+  const repository = app.db.get<{ canonical: string }>('SELECT r.canonical FROM repositories r JOIN project_roots p ON p.repository_id = r.id WHERE p.project_id = ? AND p.device_id = ? LIMIT 1', projectId, app.config.deviceId)?.canonical ?? null;
+  const report = { passed: true, observedAt: new Date().toISOString(), version, projectId, sourceId: connection.sourceId, nativeSessionId: connection.sessionId, observedFrom: connection.from, transport: connection.transport, repository, activityCount: summary.activityCount, sessionCount: summary.sessionCount, humanSignalCount: summary.summary.humanSignalCount, agentAccumulatedMs: summary.summary.agentAccumulatedMs, counts };
+  await writeFile(join(output, 'verification.json'), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+  console.log(JSON.stringify(report, null, 2));
+} finally { try { await browser?.close(); } finally { await closeApp(app); } }

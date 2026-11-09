@@ -1,0 +1,48 @@
+{
+  "name": "worklog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "scripts": {
+    "dev": "tsx src/cli/index.ts serve --dev",
+    "start": "node dist/cli/index.js serve",
+    "cli": "tsx src/cli/index.ts",
+    "smoke:claude": "tsx scripts/smoke-claude.ts",
+    "smoke:codex": "tsx scripts/smoke-codex.ts",
+    "smoke:history": "tsx scripts/smoke-history.ts",
+    "smoke:opencode-history": "tsx scripts/smoke-opencode-history.ts",
+    "smoke:opencode-plugin": "tsx scripts/smoke-opencode-plugin.ts",
+    "smoke:github": "tsx scripts/smoke-github.ts",
+    "smoke:opencode": "tsx scripts/smoke-opencode.ts",
+    "smoke:remote": "tsx scripts/smoke-remote.ts",
+    "smoke:automation": "tsx scripts/smoke-automation.ts",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node scripts/test.mjs unit",
+    "test:integration": "node scripts/test.mjs integration",
+    "test:e2e": "playwright test",
+    "build": "tsc -p tsconfig.server.json && vite build"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans": "5.3.0",
+    "diff": "9.0.0",
+    "pdfkit": "0.20.2",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "1.1.0",
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.10.1",
+    "@types/pdfkit": "0.17.7",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.0",
+    "pdfjs-dist": "6.5.438",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  }
+}

@@ -1,0 +1,8 @@
+[
+  { "atMs": 0, "event_id": "start", "hook_event_name": "SessionStart", "source": "startup" },
+  { "atMs": 1000, "event_id": "prompt", "hook_event_name": "UserPromptSubmit", "prompt_id": "test-turn", "prompt": "DO_NOT_PERSIST_SYNTHETIC_PROMPT" },
+  { "atMs": 2000, "event_id": "tool-start", "hook_event_name": "PreToolUse", "prompt_id": "test-turn", "tool_name": "Bash", "tool_use_id": "test-call", "tool_input": { "command": "TOKEN=DO_NOT_PERSIST_SYNTHETIC_SECRET harmless-command" } },
+  { "atMs": 3000, "event_id": "tool-end", "hook_event_name": "PostToolUse", "prompt_id": "test-turn", "tool_name": "Bash", "tool_use_id": "test-call", "tool_response": { "stdout": "DO_NOT_PERSIST_SYNTHETIC_OUTPUT" } },
+  { "atMs": 5000, "event_id": "stop", "hook_event_name": "Stop", "prompt_id": "test-turn", "stop_hook_active": false, "last_assistant_message": "DO_NOT_PERSIST_SYNTHETIC_RESPONSE" },
+  { "atMs": 6000, "event_id": "end", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit" }
+]

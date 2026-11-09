@@ -1,0 +1,12 @@
+[
+  {"hook_event_name":"SessionStart","source":"startup"},
+  {"hook_event_name":"UserPromptSubmit","turn_id":"turn-1","prompt":"PRIVATE_PROMPT"},
+  {"hook_event_name":"PreToolUse","turn_id":"turn-1","tool_name":"Bash","tool_use_id":"call-1","tool_input":{"command":"PRIVATE_COMMAND"}},
+  {"hook_event_name":"PostToolUse","turn_id":"turn-1","tool_name":"Bash","tool_use_id":"call-1","tool_response":{"output":"PRIVATE_OUTPUT"}},
+  {"hook_event_name":"Stop","turn_id":"turn-1","stop_hook_active":false,"last_assistant_message":"PRIVATE_ANSWER"},
+  {"hook_event_name":"Interrupt","turn_id":"turn-2"},
+  {"hook_event_name":"SubagentStart","turn_id":"parent-turn","agent_id":"child-1","agent_type":"worker"},
+  {"hook_event_name":"SubagentStop","turn_id":"child-turn","agent_id":"child-1","agent_type":"worker","stop_hook_active":false},
+  {"hook_event_name":"PreCompact","turn_id":"turn-3","trigger":"auto"},
+  {"hook_event_name":"SessionEnd","reason":"other"}
+]

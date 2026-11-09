@@ -1,0 +1,9 @@
+{
+  "originId": "native-position-one",
+  "occurredAt": "2026-11-05T09:00:00.000Z",
+  "type": "tool.start",
+  "nativeSessionId": "session",
+  "payload": { "toolName": "Bash", "toolUseId": "call-one" },
+  "command": "TOKEN=secret curl https://token:secret@example.invalid",
+  "stdout": "secret"
+}

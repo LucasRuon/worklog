@@ -1,0 +1,92 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { fixture } from '../helpers.js';
+import { openDatabase, openReadonlyDatabase } from '../../src/core/sqlite.js';
+import { normalizeOpenCode, connectOpenCode, pollOpenCode, disconnectOpenCode, openCodeDiagnostic } from '../../src/collectors/opencode.js';
+import { drainQueue } from '../../src/collectors/claude.js';
+import { projectSessions, listSessions } from '../../src/core/sessions.js';
+
+test('OpenCode: atualizações de partes não criam novos turnos, IDs estáveis e conteúdo omitido', async () => {
+  const f = await fixture();
+  try {
+    const source = { ...f.source, id: randomUUID(), tool: 'opencode' as const, version: '1.19.5' };
+    const rows = JSON.parse(await readFile(new URL('../fixtures/opencode/metadata.json', import.meta.url), 'utf8')) as Record<string, unknown>[];
+    const normalized = rows.map((row) => normalizeOpenCode(source, { ...row, cwd: f.root }));
+    assert.equal(JSON.stringify(normalized).includes('DO_NOT_CAPTURE'), false);
+    assert.equal(normalized[3]!.length, 1);
+    assert.equal(normalized[4]!.length, 2);
+    assert.equal(normalized[3]![0]!.eventId, normalized[4]![0]!.eventId);
+    assert.equal(normalized[2]![0]!.eventId, normalized[5]![0]!.eventId);
+    assert.equal(normalized[4]!.some((event) => event.type === 'turn.start'), false);
+    assert.equal(normalized.flat().some((event) => event.type === 'human.interaction'), false);
+    assert.equal(normalizeOpenCode({ ...source, version: '2.0.0' }, rows[0]).length, 0);
+    assert.equal(normalizeOpenCode(source, { ...rows[3], cwd: f.root, start: 'bad' }).length, 0);
+  } finally { await f.close(); }
+});
+
+test('observador nativo: somente leitura, recuperação sem UI, replay e isolamento da raiz/sessão', async () => {
+  const f = await fixture();
+  const path = join(f.directory, 'opencode.db');
+  const native = openDatabase(path);
+  const now = Date.now() - 60_000;
+  native.exec(`CREATE TABLE session(id TEXT PRIMARY KEY, directory TEXT NOT NULL, parent_id TEXT, version TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL);
+    CREATE TABLE message(id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL);
+    CREATE TABLE part(id TEXT PRIMARY KEY, session_id TEXT NOT NULL, message_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL);`);
+  native.run('INSERT INTO session VALUES (?, ?, ?, ?, ?, ?)', 'ses_current', f.root, null, '1.19.5', now - 10_000, now);
+  native.run('INSERT INTO session VALUES (?, ?, ?, ?, ?, ?)', 'ses_external', '/outside/authorized/roots', null, '1.19.5', now, now);
+  native.run('INSERT INTO message VALUES (?, ?, ?, ?, ?)', 'msg_user', 'ses_current', now, now, JSON.stringify({ role: 'user', time: { created: now }, text: 'DO_NOT_CAPTURE_USER_TEXT' }));
+  native.run('INSERT INTO message VALUES (?, ?, ?, ?, ?)', 'msg_assistant', 'ses_current', now + 1000, now + 2000, JSON.stringify({ role: 'assistant', time: { created: now + 1000 }, parentID: 'msg_user', text: 'DO_NOT_CAPTURE_RESPONSE' }));
+  native.run('INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)', 'prt_tool', 'ses_current', 'msg_assistant', now + 2000, now + 2000, JSON.stringify({ type: 'tool', tool: 'bash', state: { status: 'running', time: { start: now + 2000 }, input: { command: 'TOKEN=DO_NOT_CAPTURE_SECRET' } } }));
+  native.run('INSERT INTO message VALUES (?, ?, ?, ?, ?)', 'msg_external', 'ses_external', now, now, JSON.stringify({ role: 'user', time: { created: now }, text: 'EXTERNAL_SECRET' }));
+  native.close();
+  const digest = async () => createHash('sha256').update(await readFile(path)).digest('hex');
+  const originalDigest = await digest();
+  try {
+    const readonly = openReadonlyDatabase(path);
+    assert.throws(() => readonly.all('DELETE FROM message RETURNING id'));
+    readonly.close();
+    assert.throws(() => connectOpenCode(f.ctx, { databasePath: path, sessionId: 'ses_external', rootPath: f.root }), /UNAUTHORIZED/);
+    const connected = connectOpenCode(f.ctx, { databasePath: path, sessionId: 'ses_current', rootPath: f.root });
+    assert.equal(connectOpenCode(f.ctx, { databasePath: path, sessionId: 'ses_current', rootPath: f.root }).sourceId, connected.sourceId);
+    const originalCursor = f.ctx.db.get<{ value: string }>('SELECT value FROM settings WHERE key = ?', `opencodeObserver:${connected.sourceId}`)!.value;
+    f.ctx.db.exec("CREATE TRIGGER fail_checkpoint BEFORE UPDATE ON settings WHEN NEW.key LIKE 'opencodeObserver:%' BEGIN SELECT RAISE(ABORT, 'test checkpoint failure'); END");
+    assert.equal(pollOpenCode(f.ctx, { force: true })[0]!.status, 'error');
+    assert.equal(f.ctx.db.get<{ value: string }>('SELECT value FROM settings WHERE key = ?', `opencodeObserver:${connected.sourceId}`)!.value, originalCursor);
+    f.ctx.db.exec('DROP TRIGGER fail_checkpoint');
+    const first = pollOpenCode(f.ctx, { force: true });
+    assert.equal(first[0]!.status, 'ok');
+    assert.ok(drainQueue(f.ctx).inserted > 0);
+    const count = f.ctx.db.get<{ n: number }>('SELECT count(*) AS n FROM events')!.n;
+    pollOpenCode(f.ctx, { force: true }); drainQueue(f.ctx);
+    assert.equal(f.ctx.db.get<{ n: number }>('SELECT count(*) AS n FROM events')!.n, count);
+    assert.equal(await digest(), originalDigest);
+    const update = openDatabase(path);
+    update.run('UPDATE part SET time_updated = ?, data = ? WHERE id = ?', now + 4000, JSON.stringify({ type: 'tool', tool: 'bash', state: { status: 'completed', time: { start: now + 2000, end: now + 3000 }, output: 'DO_NOT_CAPTURE_TOOL_OUTPUT' } }), 'prt_tool');
+    update.run('UPDATE message SET time_updated = ?, data = ? WHERE id = ?', now + 5000, JSON.stringify({ role: 'assistant', time: { created: now + 1000, completed: now + 5000 }, text: 'DO_NOT_CAPTURE_RESPONSE' }), 'msg_assistant');
+    update.close();
+    pollOpenCode(f.ctx, { force: true });
+    assert.equal(drainQueue(f.ctx).inserted, 2);
+    const events = f.allEvents(); projectSessions(f.ctx, events);
+    const stored = JSON.stringify(events);
+    assert.equal(stored.includes('DO_NOT_CAPTURE'), false);
+    assert.equal(stored.includes('EXTERNAL_SECRET'), false);
+    assert.equal(events.filter((event) => event.type === 'turn.start').length, 1);
+    assert.equal(events.filter((event) => event.type === 'tool.end').length, 1);
+    const sessions = listSessions(f.ctx, { ...f.filter, from: new Date(now - 1000).toISOString(), to: new Date().toISOString() });
+    assert.equal(sessions.length, 1); assert.equal(sessions[0]!.tool, 'opencode');
+    const unknownVersion = openDatabase(path);
+    unknownVersion.run('UPDATE session SET version = ? WHERE id = ?', '2.0.0', 'ses_current'); unknownVersion.close();
+    assert.equal(pollOpenCode(f.ctx, { force: true })[0]!.diagnostic, 'OPENCODE_VERSION_UNSUPPORTED');
+    assert.equal(openCodeDiagnostic(f.ctx, connected.sourceId)!.diagnostic, 'OPENCODE_VERSION_UNSUPPORTED');
+    const supportedVersion = openDatabase(path);
+    supportedVersion.run('UPDATE session SET version = ? WHERE id = ?', '1.19.5', 'ses_current'); supportedVersion.close();
+    assert.equal(pollOpenCode(f.ctx, { force: true })[0]!.status, 'ok'); drainQueue(f.ctx);
+    assert.equal(openCodeDiagnostic(f.ctx, connected.sourceId)!.diagnostic, null);
+    disconnectOpenCode(f.ctx, connected.sourceId);
+    assert.equal(pollOpenCode(f.ctx, { force: true }).length, 0);
+  } finally { await f.close(); }
+});

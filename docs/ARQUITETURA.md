@@ -1,6 +1,12 @@
 # Arquitetura e contratos propostos
 
-Escolhas técnicas deste planejamento. Ler junto com `ESPECIFICACAO.md`; nenhum módulo descrito abaixo já está implementado.
+Contratos do planejamento. Ler junto com `ESPECIFICACAO.md`. A base e os módulos T02–T08 estão implementados. M1 validado com observação nativa do OpenCode, antecipada da T13 por orientação do usuário. A validação específica dos hooks Claude permanece separada. Estado e limites em `PROGRESSO.md`, evidências em `M1.md`.
+
+**Decisão observada na implementação:** `UserPromptSubmit` também ocorre em automações e não comprova interação humana. A estimativa inicia por sinal explícito no painel; a janela é configurável. A fila privada é anterior ao SQLite e funciona com o servidor fechado. A coleta de arquivos/revisões e as integrações T09 em diante permanecem planejadas.
+
+**Fonte do M1:** `opencode.ts` normaliza metadados do armazenamento nativo 1.19.5; `opencode-store.ts` projeta campos SQL permitidos em conexão somente leitura. O observador é opt-in por raiz e sessão, começa no último pedido e grava eventos filtrados na mesma fila durável. Cursores são confirmados depois da fila sincronizada; replay não duplica eventos. O plugin de eventos e a descoberta automática de novas sessões seguem em T13.
+
+**Automação atual (06/11):** o plugin em `collectors/plugins/` usa o contrato público v2.2.5 e projeta metadados antes do IPC/outbox. `core/automation.ts` descobre raízes dentro dos workspaces autorizados; hints de identidade acompanham a fila para preservar pastas/worktrees já removidas. `remote/protocol.ts` e `remote/ssh.ts` transportam lotes/manifestos pelo SSH existente. `cli/service.ts` gera unidades com argv absolutos; `core/runner.ts` processa filas e sincroniza em background. Plugin v2 e serviços estão instalados; o leitor manual v1 ficou como legado. Ver `AUTOMACAO.md` para os contratos e limites medidos.
 
 ## Componentes
 
@@ -197,6 +203,10 @@ Não desativar verificação de host SSH. Não armazenar chave privada em config
 Rotas propostas: `/api/health`, `/api/projects`, `/api/sessions`, `/api/activity`, `/api/summary`, `/api/commits`, `/api/files`, `/api/prs`, `/api/sources`, `/api/adjustments`, `/api/reports`.
 
 T08 implementa apenas rotas necessárias ao primeiro painel; tarefas seguintes ampliam. `ReportFilter` é compartilhado entre consultas e exportação. Paginação por cursor e limite de 100 registros por página para listas. Consulta de gráfico agrega no servidor; não carregar todos os eventos no navegador.
+
+Implementado após T08: `GET /api/commits` paginado, `POST /api/commits/scan`, `POST /api/reports` para prévia congelada e `GET /api/reports/:id.csv|pdf` para download autenticado. Git tem observações por raiz e deduplicação repositório+SHA; relatórios reutilizam `ReportFilter` e as consultas de tempo/sessões. Contratos, limites e protocolo SSH Git em [GIT-EXPORTACAO.md](GIT-EXPORTACAO.md). PDFKit e Noto Sans são dependências de geração local, carregadas apenas na central; não entram no bundle web nem são exigidas no agente remoto.
+
+T10/T11 acrescentam `/api/files`, `/api/files/history`, `/api/files/:id`, `/api/evidence-links` e `/api/commits/:id`, além de revisões no detalhe da sessão. Migrações `007_files.sql`/`008_evidence.sql`: conteúdo deduplicado por hash, metadados por revisão e journal para sincronização incremental. Observadores usam lease por raiz para coordenar servidor/agente; diffs usam jsdiff carregado sob demanda na central. Vínculos temporais são inferidos e associações explícitas prevalecem. Contratos e limites em [ARQUIVOS.md](ARQUIVOS.md).
 
 Bind inicial `127.0.0.1:4320` (configurável; diferente da prévia 4318). Validar Host/Origin e token de sessão local. Endpoints mutáveis e ingestão exigem autenticação; API não deve aceitar requisições arbitrárias de páginas externas. O token de bootstrap pode ser entregue ao abrir a UI local sem permanecer na URL/histórico; não embutir segredo no bundle.
 
