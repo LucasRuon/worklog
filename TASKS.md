@@ -43,9 +43,9 @@ T01 disponibilizou os comandos `npm run typecheck`, `npm run test:unit -- <camin
 
 ## Índice do backlog
 
-**Estado vigente após fechamento:** T12 CLI validada com captura real nos dois projetos (PASS 3/3); **T15 concluída no aceite explícito "disponível e comprovado"**, com verificação independente **PASS 4/4** em `.checks/t15-fechamento.verified.md`. Gates gerais reconfirmados antes do commit: **158 unitários, 32 integração e 30 E2E**, typecheck/build verdes. Commits locais autorizados `fa121cc` (implementação) e `b162071` (prova real de recuperação); sem push. Permanecem os demais aceites de perfis pessoais, PR real e piloto T24. Os parágrafos cronológicos abaixo registram estados anteriores.
+**Atualização vigente em 09/11/2026:** T14 conferida para fontes/perfis atualmente registrados; T18 comprovada com PR real #1, consultado e sincronizado no store pessoal. T24 iniciada às **2026-11-09T02:03Z**, com baseline de fontes, serviços e armazenamento em `.checks/piloto-t14-t24-2026-11-09.md`; janela mínima termina em **2026-11-10T02:03Z**. **T24 permanece em andamento** até completar um dia de uso e cenários reais. T12/T15 e gates técnicos anteriores permanecem conforme evidências abaixo. Alterações desta atualização ainda não foram commitadas nem publicadas.
 
-**Estado em 08/11:** T20 retomada e implementada; verificação independente de T14/T15/T18–T23 **PASS, 33/33 checks** no perfil light. Gates: **46 unitários, 25 integração e 28 E2E**, typecheck/build verdes; full-flow controlado desktop/mobile executado. T12 real, parsers históricos nativos restantes, conferência de perfis pessoais, PR real no piloto e T24 continuam com pendências explícitas. Relatório: `.checks/continuacao.verified.md`. Guias: [FONTES-HISTORICO.md](docs/FONTES-HISTORICO.md), [PRS-RESUMOS.md](docs/PRS-RESUMOS.md), [RELATORIOS-AJUSTES-RECUPERACAO.md](docs/RELATORIOS-AJUSTES-RECUPERACAO.md). Próximas ações: `.checks/PROXIMA-SESSAO.md`.
+**Registro histórico de 08/11:** T20 retomada e implementada; verificação independente de T14/T15/T18–T23 **PASS, 33/33 checks** no perfil light. Gates: **46 unitários, 25 integração e 28 E2E**, typecheck/build verdes; full-flow controlado desktop/mobile executado. Relatório: `.checks/continuacao.verified.md`. Guias: [FONTES-HISTORICO.md](docs/FONTES-HISTORICO.md), [PRS-RESUMOS.md](docs/PRS-RESUMOS.md), [RELATORIOS-AJUSTES-RECUPERACAO.md](docs/RELATORIOS-AJUSTES-RECUPERACAO.md). Estados atuais estão resumidos acima; os registros cronológicos seguintes preservam o contexto de cada rodada.
 
 **Continuação T15:** log durável OpenCode v2 (`opencode-log-v1`) implementado, **7/7 checks independentes**; gates daquela extensão **50/26/28 testes**. Fonte real v2 consultada sem eventos recuperáveis: `HISTORY_UNAVAILABLE`, sem alegar piloto positivo. Runtime instalado observado em **2.2.6**; suporte live entregue na revisão T13 abaixo, sem atualização da instrumentação pessoal.
 
@@ -305,7 +305,7 @@ T06–T08 foram inicialmente verificadas com fixtures e depois demonstradas com 
 - [x] Habilitar/pausar sem apagar histórico; controles centrais resistem a reenvio e conservam backlog remoto. Remoção seletiva local, revisão otimista e reinstalação explícita após tombstone.
 - [x] `sources.test.ts`: contas com mesmo ID nativo, filtros/totais, configuração removida, versão desconhecida, privacidade, pausa, concorrência, remoção e cursor remoto. E2E desktop/mobile com cadastro e teclado.
 - [x] Verificação independente dos checks de fontes/perfis e UI controlada desktop/mobile: PASS em 08/11; relatório `.checks/continuacao.verified.md`.
-- [ ] Conferência final com os perfis pessoais disponíveis. O aceite técnico com fontes controladas não comprova login/captura de cada conta pessoal.
+- [x] Conferência final das fontes/perfis atualmente registrados em 09/11: OpenCode 2.2.6 e Codex 0.167.0 locais com eventos reais; Claude 2.1.319 remoto sincronizando sem erro, com atividade histórica mas sem evento novo hoje; OpenCode 1.19.5 pausado. Perfis Claude locais sem autenticação não foram ativados nem chamados. Evidência `.checks/piloto-t14-t24-2026-11-09.md`.
 
 **Implementação T14 (07/11):** endpoints e UI entregues; `sourceIds` compartilhado por consultas e relatórios. Operação/limites em [docs/FONTES-HISTORICO.md](docs/FONTES-HISTORICO.md); checklist `.checks/t14-t15.md`.
 
@@ -378,7 +378,7 @@ T06–T08 foram inicialmente verificadas com fixtures e depois demonstradas com 
 - [x] Estados open/closed/merged separados; ausência/permissão de checks e revisões explicitamente indisponível, sem falsa aprovação.
 - [x] Intervalo de 5 min após habilitação explícita, ETag/304, cache preservado, backoff/rate limit inclusive em sync manual e cancelamento no shutdown.
 - [x] `github.test.ts` e `pull-requests.test.ts`: páginas, estados, permissões, cache/304, 401/403/offline/rate limit, autenticação, escopo e cancelamento seguro.
-- [ ] Conferir um PR real: smoke GET autenticado do piloto passou, mas **Worklog retornou zero PRs** na consulta anterior. Não criar PR para fabricar aceite; nenhuma consulta pessoal nova nesta rodada.
+- [x] Conferir um PR real: PR #1 aberto com autorização do usuário. `npm run smoke:github` observou 1 PR com URL válida; `prs sync` gravou snapshot no store pessoal (`updated=1`, `stale=false`) e `prs list` confirmou estado aberto, branches/commits e reviews/checks sem registros. Evidência `.checks/piloto-t14-t24-2026-11-09.md`.
 - [x] Verificação independente do backend/contratos: PASS em 08/11, incluindo datas, snapshots stale e review/check desconhecidos como indisponíveis.
 
 **Implementação T18:** migração aditiva **011_pull_requests.sql** (008–010 já ocupadas), endpoints `/api/prs` e `/api/prs/sync`; composição completa do painel segue T20. Detalhes em [docs/PRS-RESUMOS.md](docs/PRS-RESUMOS.md).
@@ -467,6 +467,8 @@ T06–T08 foram inicialmente verificadas com fixtures e depois demonstradas com 
 **Aceite:** uso contínuo recuperável, sem crescimento silencioso ou apagamento inesperado de dados não sincronizados.
 
 ### T24 — Piloto completo e entrega do primeiro produto
+
+**Progresso operacional em09/11 02:50UTC:** ambos os projetos têm captura OpenCode real (Posicionadas novo às23:39BRT); Codex mínimo e PR#1 já comprovados em registros posteriores à preparação abaixo. Prova segura em `.checks/t24-safe-acceptance.md`: snapshot pessoal7156 eventos/42 sessões, restore isolado/identidade e11 recibos preservados; fila real recuperada e replay0; CSV/PDF por projeto/período/máquina e nota/ajuste/undo somente no clone. Sem mudar ledger pessoal. Esses resultados são parciais: não comprovam bloqueio/suspensão/SSH offline reais, dedicação humana, cadeia completa de evidências, inspeção visual ou crescimento diário. T24 continua aberta; checklist original preservado. Resumo vigente em docs/PILOTO.md.
 
 **Piloto real pendente:** `full-flow.spec.ts` passou em desktop/mobile na retomada de 08/11, inclusive em verificação independente. Isso prova o fluxo controlado, não um dia de uso real. Pré-requisitos e cenários em `docs/PILOTO.md`.
 
