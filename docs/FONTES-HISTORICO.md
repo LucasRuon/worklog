@@ -1,5 +1,19 @@
 # Fontes, perfis e histórico — T14/T15
 
+## Aceite vigente da T15 — disponível e comprovado
+
+Em 08/11/2026 o usuário aprovou explicitamente o fechamento pelo **histórico disponível e comprovado**, com lacunas visíveis, em vez de exigir cobertura nativa integral. A implementação dos importadores e a prova real de recuperação desse escopo estão prontas; verificação independente do fechamento pendente em `.checks/t15-fechamento.md`.
+
+- **Codex real recuperado:** `npm exec -- tsx scripts/smoke-codex-recovery.ts` lê somente os dez recibos filtrados de duas sessões de teste próprias (Worklog/Posicionadas). Recuperou **10/10 eventos**, replay após reabrir o store **zero**, duas sessões importadas/projetos corretos, seleção de um projeto retorna uma sessão, zero dedicação humana/revisões. Origem aberta read-only e hashes dos recibos originais inalterados. sourceId/installationId/eventId/horários preservados em store isolado, sem serviço ativo da identidade restaurada. Evidência local `artifacts/t15-recovery/codex-receipts.json`.
+- **OpenCode nativo legado reconferido:** parser `opencode-db-1.19.5`, período 06/11 13:55–14:05 UTC: **46/46 IDs**, replay zero, resumo com 46 referências, zero sinais humanos/revisões. O ensaio usa origem somente leitura e destino temporário.
+- **Normalizado das três ferramentas:** provas de identidade/proveniência/replay/live/período, truncamento e cancelamento/retomada existentes continuam verdes. Claude recebe histórico normalizado comprovado; isso não equivale a interpretar sua transcrição nativa opaca.
+- **OpenCode v2:** parser do contrato público implementado/testado; logs reais consultados retornaram somente `log.synced`. Diagnóstico `HISTORY_UNAVAILABLE`, sem recuperação positiva alegada. Disponibilidade de um log com eventos não é criada pelo Worklog.
+- **Rollout nativo Codex:** v1/v2/v3 preservados e verificados com fixtures contratuais; o smoke real acima comprova recibos, **não** ferramentas/linhagens dos rollouts. MCP, relações adicionais e formatos sem contrato continuam fora da cobertura declarada.
+
+Não serão removidos warnings/saídas parciais dos parsers para fechar a tarefa. Esses limites deixam de bloquear **o aceite de histórico disponível escolhido pelo usuário**, sem se tornarem capacidades implementadas. Os registros cronológicos abaixo refletem os aceites mais amplos anteriores; esta seção define o aceite vigente.
+
+**Restrição adicional identificada na pesquisa de fechamento:** `opencode-log-v1` exige sequência contígua. O contrato público OpenCode 2.2.6 pode omitir eventos não decodificáveis/fora do manifesto público e apresentar lacunas legítimas ([teste oficial](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/test/session-log.test.ts#L71-L92)); esse caso é conservadoramente recusado com `HISTORY_SEQUENCE_INVALID`, não suportado silenciosamente. Ampliar esse subconjunto é melhoria futura, fora do aceite disponível/provado acordado nesta rodada; nenhuma prova atual afirma importar logs públicos com lacunas. Sessões migradas também podem retornar somente `log.synced` legitimamente ([teste oficial](https://github.com/anomalyco/opencode/blob/v2.2.6/packages/core/test/session-log.test.ts#L96-L120)). Export projetado não substitui o log, pois não contém os mesmos IDs de evento da coleta ao vivo.
+
 Implementado em 07/11/2026. **Verificação independente PASS em 08/11**, incluindo cancelamento SIGINT/retomada CLI e smoke real legado 46/46 IDs, replay zero e zero revisões/sinais humanos fabricados. Relatório em `.checks/continuacao.verified.md`; pendências pessoais e parsers adicionais em `.checks/PROXIMA-SESSAO.md`.
 
 **Continuação T15 em 08/11:** parser offline do log durável v2 implementado e verificado independentemente, **7/7 checks**, em `.checks/t15-opencode-log.verified.md`. Runtime instalado revalidado como **2.2.6**. O novo parser não altera o plugin/coleta ao vivo anteriormente validado para 2.2.5.
