@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import { mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { fixture } from '../helpers.js';
+import { createApp, closeApp } from '../../src/server/index.js';
+import { registerProjectRoot } from '../../src/core/projects.js';
+
+test('API real: seleção, período [from,to), páginas, validação e fontes sem falsa conexão', async () => {
+  const f = await fixture();
+  const app = await createApp({ dataDir: f.ctx.config.dataDir, port: 0 });
+  const token = (await readFile(join(app.config.dataDir, 'bootstrap.token'), 'utf8')).trim();
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const params = new URLSearchParams({ from: f.filter.from, to: f.filter.to, timezone: f.filter.timezone });
+  const call = (path: string, init?: RequestInit) => fetch(`${app.config.origin}${path}`, { ...init, headers: { ...headers, ...init?.headers } });
+  try {
+    const other = join(f.directory, 'other'); await mkdir(other);
+    registerProjectRoot(f.ctx, { projectName: 'Outro', deviceId: f.ctx.config.deviceId, path: other });
+    f.emit('session.start', '2026-11-05T09:00Z', { reason: 'startup' });
+    f.emit('turn.start', '2026-11-05T09:01Z', {});
+    f.emit('turn.end', '2026-11-05T09:02Z', { outcome: 'completed' });
+    f.emit('session.end', '2026-11-05T09:03Z', { reason: 'other' });
+    f.emit('session.start', '2026-11-05T09:04Z', { reason: 'startup' }, { nativeSessionId: 'other', cwd: other });
+    f.emit('session.end', '2026-11-05T09:05Z', { reason: 'other' }, { nativeSessionId: 'other', cwd: other });
+    const summary = await (await call(`/api/summary?${params}`)).json();
+    assert.equal(summary.sessionCount, 2);
+    assert.equal(summary.summary.agentAccumulatedMs, 60_000);
+    assert.equal(summary.activityCount, 6);
+    const selected = new URLSearchParams(params); selected.set('projectIds', f.projectId);
+    assert.equal((await (await call(`/api/summary?${selected}`)).json()).activityCount, 4);
+    const pageOne = await (await call(`/api/activity?${selected}&limit=2`)).json();
+    assert.equal(pageOne.items.length, 2);
+    assert.ok(pageOne.nextCursor);
+    const pageTwo = await (await call(`/api/activity?${selected}&limit=2&cursor=${encodeURIComponent(pageOne.nextCursor)}`)).json();
+    assert.equal(pageTwo.items.length, 2);
+    assert.equal(pageTwo.nextCursor, null);
+    assert.equal(new Set([...pageOne.items, ...pageTwo.items].map((row) => row.eventId)).size, 4);
+    const cutoff = new URLSearchParams(selected); cutoff.set('to', '2026-11-05T09:03:00.000Z');
+    assert.equal((await (await call(`/api/activity?${cutoff}`)).json()).items.length, 3);
+    assert.equal((await call(`/api/activity?${params}&limit=101`)).status, 400);
+    assert.equal((await call(`/api/activity?${params}&cursor=invalid`)).status, 400);
+    assert.equal((await call(`/api/summary?${params}&projectIds=not-an-id`)).status, 400);
+    const sources = await (await call('/api/sources')).json();
+    assert.equal(JSON.stringify(sources).includes('configPath'), false);
+    assert.equal(sources.items[0].state, 'observed');
+    const missing = await call('/api/projects', { method: 'POST', body: JSON.stringify({ projectName: 'Missing', path: '/definitely/missing/worklog' }) });
+    assert.equal(missing.status, 400);
+    assert.equal((await call('/api/focus', { method: 'POST', body: JSON.stringify({ projectId: f.projectId }) })).status, 204);
+    assert.equal((await call('/api/focus', { method: 'POST', body: JSON.stringify({ pause: true }) })).status, 204);
+    assert.equal((await call('/api/settings', { method: 'PATCH', body: JSON.stringify({ humanWindowMs: 60_000 }) })).status, 200);
+    assert.equal((await (await call('/api/settings')).json()).humanWindowMs, 60_000);
+  } finally { await closeApp(app); await f.close(); }
+});

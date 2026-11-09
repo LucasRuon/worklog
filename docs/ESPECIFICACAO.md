@@ -8,6 +8,8 @@ Consultar o que foi trabalhado em cada projeto, como o trabalho avançou e quant
 
 O sistema começa pessoal, local e com armazenamento SQLite. O layout do mockup foi aprovado; a paleta verde pastel foi rejeitada e substituída por grafite e neutros frios. O mockup copiado em `referencias/mockup/` é referência visual, não código de produção nem fonte de dados reais.
 
+**Atualização de aceite em 06/11/2026:** por orientação do usuário, o primeiro marco é validado com a sessão local do OpenCode, sem depender de conta Claude. A integração mínima de observação do OpenCode foi antecipada da T13; o restante do backlog e a validação específica do Claude permanecem rastreados separadamente. Evidências em `M1.md`.
+
 ## Acordado com o usuário
 
 - Coleta automática em segundo plano, por projeto e ferramenta.

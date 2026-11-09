@@ -1,0 +1,8 @@
+[
+  { "kind": "session", "id": "ses_test", "cwd": "$ROOT", "created": 1793970000000, "reason": "resume" },
+  { "kind": "message", "id": "msg_user", "sessionId": "ses_test", "cwd": "$ROOT", "role": "user", "created": 1793970001000, "text": "DO_NOT_CAPTURE_USER_TEXT" },
+  { "kind": "message", "id": "msg_assistant", "sessionId": "ses_test", "cwd": "$ROOT", "role": "assistant", "created": 1793970002000 },
+  { "kind": "tool", "id": "prt_tool", "sessionId": "ses_test", "cwd": "$ROOT", "toolName": "bash", "status": "running", "start": 1793970003000, "input": { "command": "TOKEN=DO_NOT_CAPTURE_SECRET" } },
+  { "kind": "tool", "id": "prt_tool", "sessionId": "ses_test", "cwd": "$ROOT", "toolName": "bash", "status": "completed", "start": 1793970003000, "end": 1793970004000, "output": "DO_NOT_CAPTURE_TOOL_OUTPUT" },
+  { "kind": "message", "id": "msg_assistant", "sessionId": "ses_test", "cwd": "$ROOT", "role": "assistant", "created": 1793970002000, "completed": 1793970005000, "failed": false }
+]

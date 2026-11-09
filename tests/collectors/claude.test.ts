@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { openStore } from '../../src/core/context.js';
+import { registerProjectRoot } from '../../src/core/projects.js';
+import { registerSource } from '../../src/collectors/source-config.js';
+import { configureClaudeHooks } from '../../src/cli/hooks.js';
+import { normalizeClaude, queueClaude, drainQueue } from '../../src/collectors/claude.js';
+
+test('Claude: merge/removal preserva configuração e fila funciona sem banco/UI', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'worklog-claude-'));
+  const dataDir = join(directory, 'data');
+  const root = join(directory, 'repo'); await mkdir(root);
+  execFileSync('git', ['init', '-q', root]);
+  const profile = join(directory, 'perfil com espaço'); await mkdir(profile);
+  const configPath = join(profile, 'settings.json');
+  const original = { permissions: { allow: ['Read'] }, hooks: { Stop: [{ hooks: [{ type: 'command', command: 'existing-hook' }] }] } };
+  await writeFile(configPath, JSON.stringify(original));
+  let ctx = await openStore(dataDir);
+  const source = { id: randomUUID(), deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, tool: 'claude' as const, profile: 'test', configPath, version: '2.1.318', enabled: true };
+  registerProjectRoot(ctx, { projectName: 'Claude Test', deviceId: ctx.config.deviceId, path: root });
+  registerSource(ctx, source);
+  try {
+    await configureClaudeHooks(configPath, 'install', { ctx, sourceId: source.id });
+    const installed = await readFile(configPath, 'utf8');
+    await configureClaudeHooks(configPath, 'install', { ctx, sourceId: source.id });
+    assert.equal(await readFile(configPath, 'utf8'), installed);
+    assert.equal((await readdir(profile)).filter((name) => name.includes('.worklog-backup-')).length, 1);
+    const base = { cwd: root, session_id: 'native-session', timestamp: '2026-11-05T09:00:00.000Z', prompt_id: 'prompt-one' };
+    const raw = { ...base, event_id: 'one', hook_event_name: 'UserPromptSubmit', prompt: 'SENSITIVE_PROMPT_DO_NOT_STORE' };
+    assert.equal(normalizeClaude(source, raw).some((event) => event.type === 'human.interaction'), false);
+    assert.equal(JSON.stringify(normalizeClaude(source, raw)).includes('SENSITIVE_PROMPT_DO_NOT_STORE'), false);
+    assert.equal(normalizeClaude(source, { ...base, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_use_id: 'call', is_interrupt: true }).some((event) => event.type === 'session.interrupt'), true);
+    await ctx.shutdown();
+    assert.equal(queueClaude(dataDir, source.id, { ...base, event_id: 'start', hook_event_name: 'SessionStart', source: 'startup' }), 1);
+    assert.equal(queueClaude(dataDir, source.id, raw), 2);
+    assert.equal(queueClaude(dataDir, source.id, { ...base, cwd: directory, hook_event_name: 'UserPromptSubmit' }), 0);
+    const queued = await readdir(join(dataDir, 'queue'));
+    for (const name of queued) assert.equal((await readFile(join(dataDir, 'queue', name), 'utf8')).includes('SENSITIVE_PROMPT_DO_NOT_STORE'), false);
+    ctx = await openStore(dataDir);
+    const drained = drainQueue(ctx);
+    assert.equal(drained.inserted, 3);
+    assert.equal(drainQueue(ctx).inserted, 0);
+    queueClaude(dataDir, source.id, raw);
+    assert.equal(drainQueue(ctx).duplicates, 2);
+    await configureClaudeHooks(configPath, 'remove', { ctx, sourceId: source.id });
+    assert.deepEqual(JSON.parse(await readFile(configPath, 'utf8')), original);
+  } finally { await ctx.shutdown(); await rm(directory, { recursive: true, force: true }); }
+});
