@@ -40,6 +40,7 @@ export function* openCodeLogRecords(ctx: AppContext, source: SourceRegistration,
   if (!historyOpenCodeVersions.includes(source.version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const bytes = readLog(path);
   const tools = new Map<string, string>(); let sessionId: string | undefined; let cwd = ''; let parentSessionId: string | undefined;
+  const ids = new Set<string>(); const publicGaps = source.version === '2.2.6';
   let seq: number | undefined; let synced = false; let frames = 0;
   const authorize = (directory: unknown) => {
     if (typeof directory !== 'string' || resolveProject(ctx, source.deviceId, directory).state !== 'matched') throw new DomainError('HISTORY_ROOT_UNAUTHORIZED');
@@ -59,13 +60,17 @@ export function* openCodeLogRecords(ctx: AppContext, source: SourceRegistration,
     try { raw = JSON.parse(data); assertRecord(raw); } catch { throw new DomainError('HISTORY_RECORD_INVALID'); }
     if (raw.type === 'log.synced') {
       if (!sessionId) throw new DomainError('HISTORY_UNAVAILABLE');
-      if (raw.aggregateID !== sessionId || raw.seq !== seq) throw new DomainError('HISTORY_SEQUENCE_INVALID');
+      if (raw.aggregateID !== sessionId || !Number.isSafeInteger(raw.seq) || Number(raw.seq) < seq! || (!publicGaps && raw.seq !== seq)) throw new DomainError('HISTORY_SEQUENCE_INVALID');
+      if (raw.seq !== seq) yield { warning: 'HISTORY_PUBLIC_LOG_GAPS' };
       synced = true; continue;
     }
     if (!raw.durable || typeof raw.durable !== 'object' || Array.isArray(raw.durable) || (raw.durable as Record<string, unknown>).version !== 1) throw new DomainError('HISTORY_FORMAT_UNSUPPORTED');
     const durable = raw.durable as Record<string, unknown>;
-    if (!Number.isSafeInteger(durable.seq) || Number(durable.seq) < 0 || (seq !== undefined && durable.seq !== seq + 1)) throw new DomainError('HISTORY_SEQUENCE_INVALID');
+    if (!Number.isSafeInteger(durable.seq) || Number(durable.seq) < 0 || (seq !== undefined && (Number(durable.seq) <= seq || (!publicGaps && durable.seq !== seq + 1)))) throw new DomainError('HISTORY_SEQUENCE_INVALID');
+    if (seq !== undefined && durable.seq !== seq + 1) yield { warning: 'HISTORY_PUBLIC_LOG_GAPS' };
     seq = Number(durable.seq); nativeId(raw.id); safeTime(raw.created);
+    if (ids.has(raw.id)) throw new DomainError('HISTORY_SEQUENCE_INVALID');
+    ids.add(raw.id);
     try { assertRecord(raw.data); } catch { throw new DomainError('HISTORY_RECORD_INVALID'); }
     nativeId(raw.data.sessionID);
     if (!sessionId) {

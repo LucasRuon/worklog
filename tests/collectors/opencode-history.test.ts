@@ -111,7 +111,7 @@ test('log v2: identidade, autorização e formatos desconhecidos', async () => {
 });
 
 test('log v2: cancelamento, retomada e integridade do watermark', async () => {
-  const f = await setup();
+  const f = await setup('2.2.6');
   try {
     const before = await readFile(f.path); const controller = new AbortController();
     const first = await importHistory(f.ctx, f.source.id, range, { signal: controller.signal, onProgress: () => controller.abort() });
@@ -119,7 +119,8 @@ test('log v2: cancelamento, retomada e integridade do watermark', async () => {
     const limited = await importHistory(f.ctx, f.source.id, range, { limit: 2 }); assert.equal(limited.imported, 2); assert.deepEqual(limited.warnings, ['HISTORY_MORE_AVAILABLE']);
     const rest = await importHistory(f.ctx, f.source.id, range); assert.equal(rest.imported, 5); assert.equal(rest.complete, true); assert.equal(f.allEvents().length, 8);
     assert.deepEqual(await readFile(f.path), before); assert.equal((await importHistory(f.ctx, f.source.id, range)).imported, 0);
-    for (const bytes of [f.log.events.map(f.log.frame).join(''), f.log.bytes.slice(0, -1), f.log.bytes.replace('"seq":10}', '"seq":11}')]) {
+    // A higher watermark is legitimate in 2.2.6; a regressive watermark is not.
+    for (const bytes of [f.log.events.map(f.log.frame).join(''), f.log.bytes.slice(0, -1), f.log.bytes.replace('"seq":10}', '"seq":9}')]) {
       await writeFile(f.path, bytes); const result = await importHistory(f.ctx, f.source.id, range); assert.equal(result.complete, false); assert.ok(result.warnings.includes('HISTORY_TRUNCATED') || result.warnings.includes('HISTORY_SEQUENCE_INVALID'));
       assert.equal(f.allEvents().length, 8);
     }
@@ -127,7 +128,52 @@ test('log v2: cancelamento, retomada e integridade do watermark', async () => {
     assert.deepEqual(bad.warnings, ['HISTORY_RECORD_INVALID']); assert.equal(JSON.stringify(bad).includes('PRIVATE_TRANSCRIPT'), false);
     await writeFile(f.path, f.log.frame({ type: 'log.synced', aggregateID: 'empty', seq: 0 }));
     const empty = await importHistory(f.ctx, f.source.id, range); assert.equal(empty.complete, false); assert.deepEqual(empty.warnings, ['HISTORY_UNAVAILABLE']);
-    const unknown = nativeLog(f.root); unknown.events[1]!.type = 'session.future-event'; await writeFile(f.path, unknown.events.map(unknown.frame).join('') + unknown.frame(unknown.marker));
+    const unknown = nativeLog(f.root, f.source.version); unknown.events[1]!.type = 'session.future-event'; await writeFile(f.path, unknown.events.map(unknown.frame).join('') + unknown.frame(unknown.marker));
     assert.deepEqual((await importHistory(f.ctx, f.source.id, range)).warnings, ['HISTORY_FORMAT_UNSUPPORTED']);
   } finally { await f.close(); }
+});
+
+test('log v2: lacunas públicas não inventam eventos', async () => {
+  for (const gaps of ['internal', 'tail', 'both']) {
+    const f = await setup('2.2.6');
+    try {
+      const log = nativeLog(f.root, '2.2.6');
+      for (const [index, event] of log.events.entries()) event.durable.seq = index + (gaps !== 'tail' && index > 1 ? 3 : 0);
+      log.marker.seq = log.events.at(-1)!.durable.seq + (gaps === 'internal' ? 0 : 2);
+      await writeFile(f.path, log.events.map(log.frame).join('') + log.frame(log.marker));
+      const live = prepareCapture(f.ctx.config.dataDir, normalizeEvent(f.source, projectV2Event(log.events[4], { cwd: f.root, toolName: 'Bash', parentSessionId: 'parent-session' }))).events[0]!;
+      appendEvent(f.ctx, live);
+      const result = await importHistory(f.ctx, f.source.id, range);
+      assert.equal(result.imported, 7); assert.equal(result.complete, false); assert.deepEqual(result.warnings, ['HISTORY_PUBLIC_LOG_GAPS']);
+      assert.equal(f.allEvents().length, 8); assert.equal(f.allEvents().filter((e) => e.eventId === live.eventId).length, 1);
+      assert.deepEqual(new Set(f.allEvents().map((e) => e.type)), new Set(['session.start', 'turn.submit', 'turn.start', 'tool.start', 'tool.end', 'turn.end', 'session.interrupt']));
+      const before = JSON.stringify(f.allEvents());
+      assert.equal((await importHistory(f.ctx, f.source.id, range)).imported, 0); assert.equal(JSON.stringify(f.allEvents()), before);
+      assert.equal(JSON.stringify({ result, events: f.allEvents() }).includes('PRIVATE_TRANSCRIPT'), false);
+    } finally { await f.close(); }
+  }
+});
+
+test('log v2: gaps não ocultam corrupção', async (t) => {
+  for (const issue of ['duplicate-seq', 'regression', 'duplicate-id', 'watermark-back', 'watermark-fraction', 'watermark-missing', 'watermark-foreign', 'initial-missing', 'truncated', 'unknown-frame']) await t.test(issue, async () => {
+    const f = await setup('2.2.6');
+    try {
+      const log = nativeLog(f.root, '2.2.6');
+      if (issue === 'duplicate-seq') log.events[1]!.durable.seq = 1;
+      if (issue === 'regression') log.events[1]!.durable.seq = 0;
+      if (issue === 'duplicate-id') log.events[1]!.id = log.events[0]!.id;
+      if (issue === 'watermark-back') log.marker.seq = 9;
+      if (issue === 'watermark-fraction') log.marker.seq = 10.5;
+      if (issue === 'watermark-missing') delete (log.marker as { seq?: number }).seq;
+      if (issue === 'watermark-foreign') log.marker.aggregateID = 'foreign';
+      if (issue === 'initial-missing') log.events.shift();
+      if (issue === 'unknown-frame') log.events[1]!.type = 'PRIVATE_UNKNOWN';
+      await writeFile(f.path, log.events.map(log.frame).join('') + (issue === 'truncated' ? '' : log.frame(log.marker)));
+      const result = await importHistory(f.ctx, f.source.id, range);
+      assert.equal(result.complete, false);
+      assert.deepEqual(result.warnings, [issue === 'initial-missing' || issue === 'truncated' ? 'HISTORY_TRUNCATED' : issue === 'unknown-frame' ? 'HISTORY_FORMAT_UNSUPPORTED' : 'HISTORY_SEQUENCE_INVALID']);
+      assert.equal(JSON.stringify(result).includes('PRIVATE_'), false);
+      assert.equal(f.allEvents().length, issue === 'initial-missing' ? 0 : issue.startsWith('watermark') || issue === 'truncated' ? 8 : 1);
+    } finally { await f.close(); }
+  });
 });

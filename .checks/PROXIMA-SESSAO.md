@@ -1,5 +1,9 @@
 # Próxima sessão — depois da retomada T20
 
+## Ampliação histórica posterior — 09/11/2026
+
+T15 continua concluída no aceite disponível/comprovado, não integral. Nova rodada `.checks/history-expansion.md`: gaps públicos OpenCode2.2.6 aceitos com aviso/partial e opt-in `codex-rollout-v4-0.167.0` para MCP completed + FunctionCall canônico correlacionado. Novas capacidades provadas apenas por contrato/fixtures; nenhuma nova leitura pessoal/modelo/instrumentação. Matriz vigente e contratos em `docs/HISTORICO-CONTRATOS.md`. Logs só com log.synced continuam indisponíveis. Nested/forks/revert/prefixos externos e Claude nativo continuam não suportados, com bloqueios explícitos de identidade/tempo/parentesco; não são dados fabricados ou capacidades concluídas. Sem commits autorizados nesta rodada. Resultados/verificação independente registrados no checklist/relatório próprios, não nos relatórios anteriores preservados. As notas abaixo registram os estados anteriores e os aceites do piloto podem ter alterações concorrentes em TASKS.md.
+
 Atualizado em **08/11/2026**. O pedido de continuar com `/tlc-implement` retomou T20 e a verificação adiadas em 07/11. Os avisos de adiamento nos registros históricos não representam mais o estado vigente.
 
 **Estado final vigente:** T12 CLI aceita em uso real; **T15 concluída** no aceite explícito do usuário **Disponível e comprovado**, **verificação independente PASS 4/4**, perfil light, em `.checks/t15-fechamento.verified.md`. Recuperação real Codex10/replay0, OpenCode legado46/replay0; limitações nativas mantidas, não cobertura integral. Commits locais autorizados `fa121cc` e `b162071`, sem push. Os parágrafos cronológicos abaixo conservam o histórico anterior a esse fechamento.

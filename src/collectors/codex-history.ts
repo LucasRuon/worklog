@@ -52,7 +52,7 @@ function readRows(path: string) {
 }
 
 /** Bounded opt-in projection. Transcript contents never leave this in-memory reader. */
-export function* codexRolloutRecords(ctx: AppContext, source: SourceRegistration, path: string, expanded = false, dynamic = false): Generator<CodexHistoryRecord> {
+export function* codexRolloutRecords(ctx: AppContext, source: SourceRegistration, path: string, expanded = false, dynamic = false, mcp = false): Generator<CodexHistoryRecord> {
   if (source.tool !== 'codex') throw new DomainError('HISTORY_SOURCE_MISMATCH');
   if (source.version !== '0.167.0') throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const { rows, truncated } = readRows(path); const first = rows[0];
@@ -60,6 +60,7 @@ export function* codexRolloutRecords(ctx: AppContext, source: SourceRegistration
   const meta = first.payload;
   try { uuid(meta.id); } catch { throw new DomainError('HISTORY_RECORD_INVALID'); }
   if (meta.cli_version !== source.version) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (mcp && meta.history_base != null) throw new DomainError('HISTORY_LINEAGE_UNSUPPORTED');
   const child = expanded && meta.session_id !== undefined && meta.session_id !== meta.id;
   let ownRows = rows.slice(1);
   if (child) {
@@ -96,6 +97,25 @@ export function* codexRolloutRecords(ctx: AppContext, source: SourceRegistration
       contexts.set(record.payload.turn_id, directory);
     }
   }
+  // Only an executed MCP item proves that this FunctionCall reached an MCP handler.
+  // The registry selects its canonical ToolName by exact namespace/name, not raw server/tool.
+  const mcpNames = new Map<string, { callable: string; hook: string }>();
+  if (mcp) {
+    const calls = new Set(ownRows.filter((r) => r.type === 'event_msg' && r.payload.type === 'item_completed' && (r.payload.item as Record<string, unknown> | null)?.type === 'McpToolCall').map((r) => (r.payload.item as Record<string, unknown>).id));
+    for (const record of ownRows) {
+      const call = record.payload;
+      if (record.type !== 'response_item' || call.type !== 'function_call' || !calls.has(call.call_id)) continue;
+      nativeId(call.call_id);
+      if (call.namespace == null || call.namespace === '') continue;
+      nativeId(call.namespace); nativeId(call.name);
+      const joined = `${call.namespace.replace(/_+$/, '')}__${call.name.replace(/^_+/, '')}`;
+      const hook = joined.startsWith('mcp__') ? joined : `mcp__${joined}`; nativeId(hook);
+      const callable = JSON.stringify([call.namespace, call.name]);
+      const previous = mcpNames.get(call.call_id);
+      if (previous && previous.callable !== callable) throw new DomainError('HISTORY_EVENT_CONFLICT');
+      mcpNames.set(call.call_id, { callable, hook });
+    }
+  }
   yield { warning: 'HISTORY_LIFECYCLE_ONLY' };
   if (child && !ownRows.length) yield { warning: 'HISTORY_OWN_HISTORY_UNAVAILABLE' };
   for (const record of ownRows) {
@@ -108,10 +128,17 @@ export function* codexRolloutRecords(ctx: AppContext, source: SourceRegistration
       try { assertRecord(payload.item); } catch { throw new DomainError('HISTORY_RECORD_INVALID'); }
       const item = payload.item;
       const dynamicItem = dynamic && item.type === 'DynamicToolCall';
-      if (!dynamicItem && !['CommandExecution', 'FileChange'].includes(String(item.type))) { yield { warning: 'HISTORY_TOOL_TYPE_UNSUPPORTED' }; continue; }
+      const mcpItem = mcp && item.type === 'McpToolCall';
+      if (!dynamicItem && !mcpItem && !['CommandExecution', 'FileChange'].includes(String(item.type))) { yield { warning: 'HISTORY_TOOL_TYPE_UNSUPPORTED' }; continue; }
       if (item.type === 'CommandExecution' && item.source !== 'unified_exec_startup') { yield { warning: 'HISTORY_TOOL_SOURCE_UNSUPPORTED' }; continue; }
       if (item.status !== 'completed' || (dynamicItem && item.success !== true)) { yield { warning: 'HISTORY_TOOL_STATUS_UNSUPPORTED' }; continue; }
       let toolName = item.type === 'CommandExecution' ? 'Bash' : 'apply_patch';
+      if (mcpItem) {
+        nativeId(item.id);
+        const identity = mcpNames.get(item.id);
+        if (!identity) { yield { warning: 'HISTORY_MCP_IDENTITY_UNAVAILABLE' }; continue; }
+        toolName = identity.hook;
+      }
       if (dynamicItem) {
         nativeId(item.tool);
         if (item.namespace != null && item.namespace !== '') nativeId(item.namespace);

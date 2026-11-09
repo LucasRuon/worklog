@@ -17,7 +17,7 @@ import { openCodeLogRecords } from './opencode-history.js';
 import { codexRolloutRecords, type CodexHistoryRecord } from './codex-history.js';
 import { canonicalCodexEvent } from './codex-receipts.js';
 
-const parsers = ['normalized-v1', 'opencode-db-1.19.5', 'opencode-log-v1', 'codex-receipts-v1', 'codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'git-v1'] as const;
+const parsers = ['normalized-v1', 'opencode-db-1.19.5', 'opencode-log-v1', 'codex-receipts-v1', 'codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0', 'git-v1'] as const;
 type Parser = typeof parsers[number];
 type Range = { from: string; to: string };
 type Checkpoint = { offset: number; resource: string; digest: string };
@@ -36,7 +36,7 @@ export function configureHistory(ctx: AppContext, sourceId: string, input: { par
   if (!parsers.includes(input.parser as Parser) || !isAbsolute(input.path) || input.path.length > 4096 || /[\x00-\x1f]/.test(input.path)) throw new DomainError('HISTORY_INPUT_INVALID');
   if (input.parser === 'git-v1' && source.tool !== 'git') throw new DomainError('HISTORY_SOURCE_MISMATCH');
   if (input.parser === 'opencode-log-v1' && source.tool !== 'opencode') throw new DomainError('HISTORY_SOURCE_MISMATCH');
-  if (['codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0'].includes(input.parser) && source.tool !== 'codex') throw new DomainError('HISTORY_SOURCE_MISMATCH');
+  if (['codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser) && source.tool !== 'codex') throw new DomainError('HISTORY_SOURCE_MISMATCH');
   ctx.db.run('INSERT INTO history_inputs VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET parser = excluded.parser, path = excluded.path', sourceId, input.parser, input.path);
 }
 
@@ -163,7 +163,7 @@ export async function importHistory(ctx: AppContext, sourceId: string, range: Ra
       // Git indexes repository objects independently of a report period; querying applies [from,to).
       result.complete = !result.warnings.length; return result;
     }
-    const records: Iterable<RecordInput | CodexHistoryRecord> | null = input.parser === 'normalized-v1' ? archiveRecords(input.path, source, checkpoint) : input.parser === 'opencode-db-1.19.5' ? legacyRecords(ctx, input.path, source) : input.parser === 'opencode-log-v1' ? openCodeLogRecords(ctx, source, input.path) : input.parser === 'codex-receipts-v1' ? receiptRecords(ctx, source) : input.parser === 'codex-rollout-0.167.0' || input.parser === 'codex-rollout-v2-0.167.0' || input.parser === 'codex-rollout-v3-0.167.0' ? codexRolloutRecords(ctx, source, input.path, input.parser !== 'codex-rollout-0.167.0', input.parser === 'codex-rollout-v3-0.167.0') : null;
+    const records: Iterable<RecordInput | CodexHistoryRecord> | null = input.parser === 'normalized-v1' ? archiveRecords(input.path, source, checkpoint) : input.parser === 'opencode-db-1.19.5' ? legacyRecords(ctx, input.path, source) : input.parser === 'opencode-log-v1' ? openCodeLogRecords(ctx, source, input.path) : input.parser === 'codex-receipts-v1' ? receiptRecords(ctx, source) : ['codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser) ? codexRolloutRecords(ctx, source, input.path, input.parser !== 'codex-rollout-0.167.0', ['codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser), input.parser === 'codex-rollout-v4-0.167.0') : null;
     if (!records) throw new DomainError('HISTORY_FORMAT_UNSUPPORTED');
     for (const item of records) {
       if (options.signal?.aborted) { warn('HISTORY_CANCELLED'); break; }
