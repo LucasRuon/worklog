@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import PDFDocument from 'pdfkit';
 import type { ReportData } from '../core/contracts.js';
 import { timeMeasures } from './csv.js';
+import { formatDateTime } from '../core/dates.js';
 
 const require = createRequire(import.meta.url);
 export async function renderPdf(data: ReportData): Promise<Uint8Array> {
@@ -13,7 +14,7 @@ export async function renderPdf(data: ReportData): Promise<Uint8Array> {
     doc.registerFont('bold', require.resolve('@fontsource/noto-sans/files/noto-sans-latin-600-normal.woff'));
     const text = (value: string) => { doc.font('regular').fontSize(9).fillColor('#454b54').text(value, { paragraphGap: 5 }); };
     const title = (value: string) => { if (doc.y > doc.page.height - 120) doc.addPage(); doc.moveDown(.6).font('bold').fontSize(13).fillColor('#252930').text(value); doc.moveDown(.4); };
-    const date = (value: string) => new Intl.DateTimeFormat('pt-BR', { timeZone: data.filter.timezone, dateStyle: 'short', timeStyle: 'medium' }).format(new Date(value));
+    const date = (value: string) => formatDateTime(value, data.filter.timezone);
     const names = (ids: string[]) => [...new Set(ids.map((id) => data.projects.find((p) => p.id === id)!.name))].join(', ');
     doc.font('bold').fontSize(24).fillColor('#252930').text('Worklog');
     doc.font('regular').fontSize(12).text('Relatório de trabalho'); doc.moveDown();

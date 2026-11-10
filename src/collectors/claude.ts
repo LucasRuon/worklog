@@ -6,7 +6,7 @@ import { normalizeEvent } from '../core/policy.js';
 import { readPrivate } from '../core/private-files.js';
 import { appendEvent, validateEvent } from '../core/events.js';
 import { registerProjectRoot, resolveProject } from '../core/projects.js';
-import { captureSource, enqueueEvents } from './queue.js';
+import { captureSource, captureTaskTitles, enqueueEvents } from './queue.js';
 import { discoverProject, workspaces } from '../core/automation.js';
 import { inside } from '../core/context.js';
 
@@ -14,7 +14,42 @@ export const supportedClaudeVersions = ['2.1.318', '2.1.319'];
 
 export const claudeHooks = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PreCompact'] as const;
 
-export function normalizeClaude(source: SourceRegistration, raw: unknown, observed = { originId: randomUUID() as string, occurredAt: new Date().toISOString() }): EventInput[] {
+type TaskStatus = 'pending' | 'in_progress' | 'completed';
+const taskStatuses: TaskStatus[] = ['pending', 'in_progress', 'completed'];
+/** Só o título curto, sem descrição: espaços colapsados, controles removidos e limite de 160 caracteres. */
+function taskTitle(value: unknown) {
+  if (typeof value !== 'string') return undefined;
+  const title = value.replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return title ? (title.length > 160 ? `${title.slice(0, 159).trimEnd()}…` : title) : undefined;
+}
+const record = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+const nativeTaskId = (value: unknown) => (typeof value === 'string' || typeof value === 'number') && /^[A-Za-z0-9_.:-]{1,160}$/.test(String(value)) ? String(value) : undefined;
+
+/** Tasks do Claude Code (TodoWrite, TaskCreate, TaskUpdate) viram `task.update` apenas com opt-in. */
+function claudeTask(raw: Record<string, unknown>): { status: TaskStatus; title?: string; taskId?: string } | null {
+  const input = record(raw.tool_input) ?? {};
+  if (raw.hook_event_name === 'PreToolUse' && raw.tool_name === 'TodoWrite' && Array.isArray(input.todos)) {
+    const todos = input.todos.map(record).filter((todo): todo is Record<string, unknown> => Boolean(todo));
+    const current = todos.find((todo) => todo.status === 'in_progress');
+    if (current) { const title = taskTitle(current.activeForm) ?? taskTitle(current.content); return title ? { status: 'in_progress', title } : null; }
+    const last = todos.length && todos.every((todo) => todo.status === 'completed') ? todos.at(-1)! : null;
+    const title = last ? taskTitle(last.content) : undefined;
+    return title ? { status: 'completed', title } : null;
+  }
+  if (raw.hook_event_name === 'PostToolUse' && raw.tool_name === 'TaskCreate') {
+    const response = record(raw.tool_response) ?? {};
+    const taskId = nativeTaskId(record(response.task)?.id ?? response.taskId ?? response.id);
+    const title = taskTitle(input.subject);
+    return title ? { status: 'pending', title, ...(taskId ? { taskId } : {}) } : null;
+  }
+  if (raw.hook_event_name === 'PreToolUse' && raw.tool_name === 'TaskUpdate' && taskStatuses.includes(input.status as TaskStatus)) {
+    const taskId = nativeTaskId(input.taskId); const title = taskTitle(input.activeForm) ?? taskTitle(input.subject);
+    return taskId || title ? { status: input.status as TaskStatus, ...(title ? { title } : {}), ...(taskId ? { taskId } : {}) } : null;
+  }
+  return null;
+}
+
+export function normalizeClaude(source: SourceRegistration, raw: unknown, observed = { originId: randomUUID() as string, occurredAt: new Date().toISOString() }, options: { taskTitles?: boolean } = {}): EventInput[] {
   try {
     assertRecord(raw);
     if (source.tool !== 'claude' || !supportedClaudeVersions.includes(source.version) || Buffer.byteLength(JSON.stringify(raw)) > 1024 * 1024 || typeof raw.hook_event_name !== 'string' || typeof raw.session_id !== 'string') return [];
@@ -41,6 +76,7 @@ export function normalizeClaude(source: SourceRegistration, raw: unknown, observ
       case 'SubagentStop': add('turn.end', { ...turnId, outcome: 'completed' }); add('session.end', { reason: 'subagent' }); break;
       case 'PreCompact': add('session.start', { reason: 'compact' }); break;
     }
+    if (options.taskTitles) { const task = claudeTask(raw); if (task) add('task.update', task); }
     return output;
   } catch { return []; }
 }
@@ -52,7 +88,7 @@ export function queueClaude(dataDir: string, sourceId: string, raw: unknown): nu
     const source = captureSource(dataDir, sourceId);
     if (!source) return 0;
     const cwd = realpathSync(raw.cwd);
-    const events = normalizeClaude(source, { ...raw, cwd });
+    const events = normalizeClaude(source, { ...raw, cwd }, undefined, { taskTitles: captureTaskTitles(dataDir) });
     return enqueueEvents(dataDir, events);
   } catch { return 0; }
 }

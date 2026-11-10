@@ -12,12 +12,13 @@ const shapes: Record<EventType, { required: string[]; optional?: string[]; enums
   'turn.end': { required: ['outcome'], optional: ['turnId'], enums: { outcome: ['completed', 'failed', 'interrupted'] } },
   'tool.start': { required: ['toolName', 'toolUseId'] },
   'tool.end': { required: ['toolName', 'toolUseId', 'outcome'], enums: { outcome: ['completed', 'failed', 'interrupted'] } },
-  'human.interaction': { required: ['kind'], enums: { kind: ['prompt', 'explicit'] } },
+  'human.interaction': { required: ['kind'], optional: ['projectId'], enums: { kind: ['prompt', 'explicit'] } },
   'focus.change': { required: ['confidence'], optional: ['projectId', 'sessionId'], enums: { confidence: ['explicit', 'observed', 'unresolved'] } },
   'machine.idle': { required: ['reason'], enums: { reason: ['idle', 'lock', 'sleep', 'pause'] } },
   'machine.resume': { required: [] },
   'file.change': { required: ['rootId', 'path', 'operation'], optional: ['sha256'], enums: { operation: ['create', 'edit', 'delete', 'rename'] } },
   'git.commit': { required: ['repositoryId', 'sha'] },
+  'task.update': { required: ['status'], optional: ['title', 'taskId'], enums: { status: ['pending', 'in_progress', 'completed'] } },
 };
 
 export function validateEvent(value: unknown, sequenced = false): asserts value is WorkEvent {
@@ -38,6 +39,8 @@ export function validateEvent(value: unknown, sequenced = false): asserts value 
     if (['projectId', 'sessionId', 'rootId', 'repositoryId'].includes(key)) uuid(item);
     else if (key === 'path') {
       if (typeof item !== 'string' || item.length > 4096 || isAbsolute(item) || item.split(/[\\/]/).includes('..') || /[\x00-\x1f]/.test(item)) throw new DomainError('INVALID_PATH');
+    } else if (key === 'title') {
+      if (typeof item !== 'string' || item.length < 1 || item.length > 160 || item !== item.trim() || /[\x00-\x1f\x7f]/.test(item)) throw new DomainError('INVALID_PAYLOAD');
     } else if (key === 'sha' || key === 'sha256') {
       if (typeof item !== 'string' || !(key === 'sha' ? /^[a-f0-9]{40,64}$/ : /^[a-f0-9]{64}$/).test(item)) throw new DomainError('INVALID_HASH');
     } else shortId(item);

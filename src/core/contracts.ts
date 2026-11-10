@@ -17,12 +17,14 @@ export interface EventPayloads {
   'turn.end': { turnId?: string; outcome: Outcome };
   'tool.start': { toolName: string; toolUseId: string };
   'tool.end': { toolName: string; toolUseId: string; outcome: Outcome };
-  'human.interaction': { kind: 'prompt' | 'explicit' };
+  'human.interaction': { kind: 'prompt' | 'explicit'; projectId?: string };
   'focus.change': { projectId?: string; sessionId?: string; confidence: 'explicit' | 'observed' | 'unresolved' };
   'machine.idle': { reason: 'idle' | 'lock' | 'sleep' | 'pause' };
   'machine.resume': Record<string, never>;
   'file.change': { rootId: string; path: string; operation: 'create' | 'edit' | 'delete' | 'rename'; sha256?: string };
   'git.commit': { repositoryId: string; sha: string };
+  /** Título curto da task do agente; só existe com captura opt-in (`captureTaskTitles`). */
+  'task.update': { status: 'pending' | 'in_progress' | 'completed'; title?: string; taskId?: string };
 }
 export type EventType = keyof EventPayloads;
 interface EventIdentity {
@@ -43,7 +45,7 @@ export interface ProjectRoot {
 }
 export type ProjectMatch = { state: 'matched'; projectId: string; repositoryId: string | null; rootId: string; worktree: string; reason: 'authorized-root' }
   | { state: 'unassigned'; reason: 'outside-roots' | 'invalid-path' | 'paused' };
-export interface Project { id: string; name: string; client: string | null; roots: ProjectRoot[] }
+export interface Project { id: string; name: string; client: string | null; clientId: string | null; roots: ProjectRoot[] }
 export interface Session {
   id: string; sourceId: string; deviceId: string; tool: Tool; profile: string; nativeSessionId: string; nativeAgentId: string | null;
   parentSessionId: string | null; projectId: string | null; startedAt: string; lastEventAt: string; endedAt: string | null;
@@ -53,7 +55,7 @@ export interface Session {
 export interface ReportFilter { projectIds: string[]; from: string; to: string; timezone: string; deviceIds?: string[]; tools?: Tool[]; sourceIds?: string[]; includeUnassigned?: boolean; onlyUnassigned?: boolean }
 export interface Interval { start: string; end: string; sessionId: string; projectId?: string; quality: 'observed' | 'estimated' | 'adjusted' }
 export interface TimeSummary {
-  humanEstimatedMs: number; humanAdjustedMs: number; unassignedHumanMs: number; agentAccumulatedMs: number; agentWallMs: number; sessionSpanMs: number;
+  humanEstimatedMs: number; humanAdjustedMs: number; humanManualMs: number; unassignedHumanMs: number; agentAccumulatedMs: number; agentWallMs: number; sessionSpanMs: number;
   incompleteSessions: number; ruleVersion: string;
   humanSignalCount: number;
 }

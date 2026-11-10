@@ -11,11 +11,16 @@ import { gitRead, normalizeRemote } from '../core/projects.js';
 function manifest(dataDir: string) {
   const value: unknown = JSON.parse(readPrivate(join(dataDir, 'capture.json'))); assertRecord(value);
   if (value.schemaVersion !== 1 || !Array.isArray(value.sources) || !Array.isArray(value.roots)) throw new DomainError('INVALID_CAPTURE_CONFIG');
-  return value as unknown as { schemaVersion: 1; sources: SourceRegistration[]; roots: ProjectRoot[]; workspaces?: string[]; policy?: PolicyConfig };
+  return value as unknown as { schemaVersion: 1; sources: SourceRegistration[]; roots: ProjectRoot[]; workspaces?: string[]; policy?: PolicyConfig; taskTitles?: boolean };
 }
 export function captureSource(dataDir: string, sourceId: string) {
   uuid(sourceId);
   return manifest(dataDir).sources.find((source) => source.id === sourceId && source.enabled);
+}
+
+/** Captura de títulos de tasks é opt-in global; manifesto ausente ou antigo equivale a desligada. */
+export function captureTaskTitles(dataDir: string) {
+  try { return manifest(dataDir).taskTitles === true; } catch { return false; }
 }
 
 export function prepareCapture(dataDir: string, events: EventInput[]) {

@@ -28,7 +28,7 @@ export function storageUsage(ctx: AppContext) {
   return { bytes, databaseBytes, budgetBytes, files, partial, status: bytes >= budgetBytes ? 'limit' : bytes >= budgetBytes * .8 ? 'warning' : 'ok', policy: 'content-paused-at-budget; metadata-and-events-preserved' };
 }
 function counts(db: Pick<AppContext['db'], 'get'>) {
-  return Object.fromEntries(['events', 'sessions', 'file_revisions', 'file_contents', 'time_adjustments', 'note_versions'].map((table) => [table, db.get<{ n: number }>(`SELECT count(*) n FROM ${table}`)!.n]));
+  return Object.fromEntries(['events', 'sessions', 'file_revisions', 'file_contents', 'time_adjustments', 'note_versions', 'manual_time'].map((table) => [table, db.get<{ n: number }>(`SELECT count(*) n FROM ${table}`)!.n]));
 }
 function safeDestination(path: string) { if (!isAbsolute(path) || /[\x00-\x1f]/.test(path)) throw new DomainError('MAINTENANCE_PATH_INVALID'); return resolve(path); }
 async function digest(path: string) { const hash = createHash('sha256'); for await (const chunk of createReadStream(path, { fd: openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW), autoClose: true })) hash.update(chunk); return hash.digest('hex'); }

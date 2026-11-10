@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { fixture } from '../helpers.js';
 import { createApp, closeApp } from '../../src/server/index.js';
-import { dateInZone } from '../../src/core/dates.js';
+import { dateInZone, toLocalInput } from '../../src/core/dates.js';
 
 test('nota e ajuste auditável no relatório', async ({ page }, info) => {
-  const f = await fixture(); const start = new Date(Date.now() - 600000).toISOString(); const end = new Date(Date.parse(start) + 300000).toISOString();
+  const f = await fixture(); const start = new Date(Math.floor((Date.now() - 600000) / 1000) * 1000).toISOString(); const end = new Date(Date.parse(start) + 300000).toISOString();
   f.emit('human.interaction', start, { kind: 'explicit' });
   const app = await createApp({ dataDir: f.ctx.config.dataDir, port: 0 });
   async function navigate(name: string) { const link = page.getByRole('navigation', { name: 'Navegação principal' }).getByRole('link', { name, exact: true }); if (!(await link.isVisible())) await page.getByRole('button', { name: 'Menu', exact: true }).click(); await link.click(); }
@@ -18,7 +18,7 @@ test('nota e ajuste auditável no relatório', async ({ page }, info) => {
     await page.getByLabel('Texto da nota', { exact: true }).fill('  =SOMA(1,2)\nNota explícita á');
     await page.getByRole('button', { name: 'Salvar nota', exact: true }).focus(); await page.keyboard.press('Enter');
     await expect(page.getByText('Nota salva com versão auditável.', { exact: true })).toBeVisible();
-    await page.getByLabel('Início do ajuste (UTC)').fill(start); await page.getByLabel('Fim do ajuste (UTC)').fill(end); await page.getByLabel('Dedicação corrigida (minutos)').fill('2'); await page.getByLabel('Motivo do ajuste', { exact: true }).fill('Correção consciente');
+    await page.getByLabel('Início do ajuste (horário de Brasília)').fill(toLocalInput(start)); await page.getByLabel('Fim do ajuste (horário de Brasília)').fill(toLocalInput(end)); await page.getByLabel('Dedicação corrigida (minutos)').fill('2'); await page.getByLabel('Motivo do ajuste', { exact: true }).fill('Correção consciente');
     await page.getByRole('button', { name: 'Registrar ajuste', exact: true }).focus(); await page.keyboard.press('Enter');
     await expect(page.getByText('Ajuste registrado. Estimativa original preservada.', { exact: true })).toBeVisible();
     await navigate('Exportação'); await page.getByLabel('Notas do usuário', { exact: true }).check(); await page.getByRole('button', { name: 'Gerar prévia', exact: true }).click();

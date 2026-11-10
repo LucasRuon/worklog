@@ -16,11 +16,13 @@ export function recordFocus(ctx: AppContext, event: EventInput) {
 
 export function signalHuman(ctx: AppContext, projectId: string | null, pause = false) {
   const root = projectId ? ctx.db.get<{ path: string }>('SELECT path FROM project_roots WHERE project_id = ? AND device_id = ? AND enabled = 1 ORDER BY path LIMIT 1', projectId, ctx.config.deviceId) : null;
-  if (!pause && !root) throw new DomainError('LOCAL_PROJECT_REQUIRED');
+  // Projeto sem raiz nesta máquina (ex.: só no macmini): o sinal leva o ID do projeto em vez da pasta.
+  const remoteOnly = !pause && !root && !!projectId && !!ctx.db.get('SELECT id FROM projects WHERE id = ?', projectId);
+  if (!pause && !root && !remoteOnly) throw new DomainError(projectId ? 'UNKNOWN_PROJECT' : 'LOCAL_PROJECT_REQUIRED');
   const sourceId = stableId(ctx.config.installationId, 'focus');
   registerSource(ctx, { id: sourceId, deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, tool: 'focus', profile: 'explicit', configPath: ctx.config.dataDir, version: '1', enabled: true });
   const base = { schemaVersion: 1 as const, eventId: randomUUID(), deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, sourceId, tool: 'focus' as const, occurredAt: new Date().toISOString(), ...(root ? { cwd: root.path } : {}) };
-  return recordFocus(ctx, pause ? { ...base, type: 'machine.idle', payload: { reason: 'pause' } } : { ...base, type: 'human.interaction', payload: { kind: 'explicit' } });
+  return recordFocus(ctx, pause ? { ...base, type: 'machine.idle', payload: { reason: 'pause' } } : { ...base, type: 'human.interaction', payload: remoteOnly ? { kind: 'explicit', projectId: projectId! } : { kind: 'explicit' } });
 }
 
 export async function probeMachine(): Promise<{ status: 'observed' | 'unavailable'; idleMs: number; locked: boolean }> {
@@ -38,7 +40,7 @@ export async function probeMachine(): Promise<{ status: 'observed' | 'unavailabl
 }
 
 export function startFocusObserver(ctx: AppContext) {
-  let previousAt = Date.now(); let idle = false; let busy = false; let stopped = false;
+  let previousAt = Date.now(); let idle = false; let busy = false; let stopped = false; let first = true;
   let pending: Promise<void> = Promise.resolve();
   async function poll() {
     if (busy || stopped) return;
@@ -51,11 +53,19 @@ export function startFocusObserver(ctx: AppContext) {
       const now = Date.now();
       const asleep = now - previousAt > 15_000;
       const inactive = signal.status === 'observed' && (signal.locked || signal.idleMs >= operatingConfig(ctx).idleMs);
+      const sourceId = stableId(ctx.config.installationId, 'focus');
+      const base = { schemaVersion: 1 as const, deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, sourceId, tool: 'focus' as const };
+      const register = () => registerSource(ctx, { id: sourceId, deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, tool: 'focus', profile: 'explicit', configPath: ctx.config.dataDir, version: '1', enabled: true });
       if ((!idle && inactive) || asleep) {
-        const sourceId = stableId(ctx.config.installationId, 'focus');
-        registerSource(ctx, { id: sourceId, deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, tool: 'focus', profile: 'explicit', configPath: ctx.config.dataDir, version: '1', enabled: true });
-        recordFocus(ctx, { schemaVersion: 1, eventId: randomUUID(), deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, sourceId, tool: 'focus', occurredAt: new Date(asleep ? previousAt : now).toISOString(), type: 'machine.idle', payload: { reason: asleep ? 'pause' : signal.locked ? 'lock' : 'idle' } });
+        register();
+        recordFocus(ctx, { ...base, eventId: randomUUID(), occurredAt: new Date(asleep ? previousAt : now).toISOString(), type: 'machine.idle', payload: { reason: asleep ? 'pause' : signal.locked ? 'lock' : 'idle' } });
       }
+      // Retorno observado (teclado/mouse ativos e tela desbloqueada): delimita a ausência para a dedicação por prompts.
+      if (signal.status === 'observed' && !inactive && (idle || asleep || first)) {
+        register();
+        recordFocus(ctx, { ...base, eventId: randomUUID(), occurredAt: new Date(now).toISOString(), type: 'machine.resume', payload: {} });
+      }
+      if (signal.status === 'observed') first = false;
       idle = inactive; previousAt = now;
     } finally { busy = false; }
   }

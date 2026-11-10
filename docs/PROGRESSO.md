@@ -192,6 +192,16 @@ A documentação atual informa que `UserPromptSubmit` também dispara em `/loop`
 
 A estimativa começa por **Registrar dedicação**, escolhendo um projeto local. Janela padrão de 5 min, configurável entre 1 e 60 min em Integrações. Alterar a janela reprocessa a estimativa preservando os sinais originais. `humanEstimatedMs` contém somente trechos atribuídos; `unassignedHumanMs` é apresentado separadamente. Ajustes auditáveis continuam em T22.
 
+**Revisão em 09/11/2026 — regra `presence-split-v1`, pedida pelo usuário.** Substitui `explicit-signal-window-v1`:
+
+- `turn.submit` de sessão raiz (sem `nativeAgentId`/`parentSessionId`) de Claude, Codex e OpenCode abre a mesma janela configurável no projeto do `cwd`. Ele não vira `human.interaction`; a decisão acima sobre o hook continua valendo.
+- O observador macOS agora emite `machine.resume` na partida e ao sair de ociosidade/bloqueio/suspensão. A partir do primeiro retorno observado em cada máquina, prompts enviados entre `machine.idle` e `machine.resume` são ignorados, o que filtra automações com o usuário ausente. Antes desse marco (histórico legado) e em máquinas sem observação (Linux remoto), prompts contam sempre; não há como distinguir automações ali.
+- Cada máquina mantém uma janela por projeto. O sinal explícito continua exclusivo: encerra as demais janelas da máquina.
+- Trechos com projetos simultâneos, mesmo em máquinas diferentes, são divididos em partes iguais, inclusive a parte "sem projeto". O total humano nunca passa do relógio. A divisão é global, calculada antes dos filtros; antes, ambiguidade ia inteira para não atribuído.
+- Testes: `tests/core/time.test.ts` ("dedicação por prompts…" e concorrência entre máquinas atualizada) e `tests/integration/recovery.test.ts` (retorno observado).
+
+**Tempo manual aditivo (09/11/2026, migração `015_manual_time`).** "Lançar tempo" na Visão geral registra projeto, dia local, duração (1 min a 24 h, sem datas futuras) e nota opcional. Diferente do ajuste T22, **soma** à dedicação automática, não substitui intervalos e não afeta outros projetos. Fica em `TimeSummary.humanManualMs`, no CSV/PDF ("Dedicação humana lançada manualmente") e na prévia de exportação. Entra no período quando o início do dia local está dentro do filtro. A tabela é append-only (triggers), e a remoção é feita por registro compensatório (`removes`). API: `GET/POST /api/manual-time`, `POST /api/manual-time/:id/remove`. Testes: `tests/core/manual-time.test.ts`.
+
 ### T08 — API e painel
 
 - `tests/integration/api-local.test.ts`: dois projetos, seleção, período `[from,to)`, paginação sem repetição, cursor inválido, limite máximo de 100, fonte sem credencial/configPath, cadastro inválido, foco e configuração da janela.

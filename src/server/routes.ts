@@ -5,7 +5,10 @@ import { validateFilter, selectedProjects } from '../core/filters.js';
 import { dateInZone, nextDate, startOfDay } from '../core/dates.js';
 import { listProjects, registerProjectRoot } from '../core/projects.js';
 import { listSessions, projectSessions, rebuildSessions } from '../core/sessions.js';
-import { deriveTime } from '../core/time.js';
+import { deriveSeries, deriveTime } from '../core/time.js';
+import { liveState } from '../core/live.js';
+import { addManualTime, listManualTime, removeManualTime } from '../core/manual-time.js';
+import { createClient, listClients, removeClient, renameClient, setProjectClient } from '../core/clients.js';
 import { controlSource, registerSource } from '../collectors/source-config.js';
 import { sourceStatuses } from '../collectors/source-status.js';
 import { removeSourceInstrumentation } from '../cli/source-management.js';
@@ -127,6 +130,26 @@ export async function handleRoutes(ctx: AppContext, req: IncomingMessage, res: S
     }
     const undo = path.match(/^\/api\/adjustments\/([^/]+)\/undo$/);
     if (undo && method === 'POST') { const body = await readBody(req); const id = undoAdjustment(ctx, undo[1]!, body as never); json(res, 201, { id, revision: adjustmentRevision(ctx) }); return; }
+    if (path === '/api/clients' && method === 'GET') { json(res, 200, { items: listClients(ctx) }); return; }
+    if (path === '/api/clients' && method === 'POST') { const body = await readBody(req); exactKeys(body, ['name']); json(res, 201, { id: createClient(ctx, body.name) }); return; }
+    const clientAction = path.match(/^\/api\/clients\/([^/]+)\/(rename|remove)$/);
+    if (clientAction && method === 'POST') {
+      if (clientAction[2] === 'rename') { const body = await readBody(req); exactKeys(body, ['name']); renameClient(ctx, clientAction[1]!, body.name); }
+      else removeClient(ctx, clientAction[1]!);
+      json(res, 200, { items: listClients(ctx) }); return;
+    }
+    const projectClient = path.match(/^\/api\/projects\/([^/]+)\/client$/);
+    if (projectClient && method === 'POST') {
+      const body = await readBody(req); exactKeys(body, ['clientId']);
+      if (body.clientId !== null && typeof body.clientId !== 'string') throw new DomainError('INVALID_CLIENT');
+      setProjectClient(ctx, projectClient[1]!, body.clientId as string | null); json(res, 200, { ok: true }); return;
+    }
+    if (path === '/api/manual-time' && method === 'GET') { json(res, 200, { items: listManualTime(ctx, filterFromUrl(ctx, url)) }); return; }
+    if (path === '/api/manual-time' && method === 'POST') { const body = await readBody(req); json(res, 201, { id: addManualTime(ctx, body) }); return; }
+    const manualRemove = path.match(/^\/api\/manual-time\/([^/]+)\/remove$/);
+    if (manualRemove && method === 'POST') { removeManualTime(ctx, manualRemove[1]!); json(res, 200, { removed: true }); return; }
+    if (path === '/api/live' && method === 'GET') { const filter = filterFromUrl(ctx, url); json(res, 200, liveState(ctx, filter, eventsQuery(ctx, filter), operatingConfig(ctx).captureTaskTitles)); return; }
+    if (path === '/api/summary/series' && method === 'GET') { json(res, 200, deriveSeries(ctx, filterFromUrl(ctx, url))); return; }
     if (path === '/api/work-summary' && method === 'GET') { json(res, 200, buildWorkSummary(ctx, filterFromUrl(ctx, url))); return; }
     if (path === '/api/prs/sync' && method === 'POST') {
       const body = await readBody(req); exactKeys(body, ['repositoryId']); uuid(body.repositoryId);

@@ -5,6 +5,7 @@ import { dirname, isAbsolute, relative, resolve, posix } from 'node:path';
 import { inside } from './context.js';
 import { publishCaptureManifest } from '../collectors/source-config.js';
 import { assertRecord, exactKeys, uuid, DomainError, type AppContext, type ProjectRoot, type ProjectMatch, type Project } from './contracts.js';
+import { assignClientByNameInTransaction } from './clients.js';
 
 export function normalizeRemote(remote: string): string {
   if (typeof remote !== 'string' || remote.length > 4096 || /[\x00-\x20]/.test(remote)) throw new DomainError('INVALID_REMOTE');
@@ -68,7 +69,8 @@ export function registerProjectRoot(ctx: AppContext, root: ProjectRoot, options:
     }
     const associated = repositoryId ? ctx.db.get<{ primary_project_id: string | null }>('SELECT primary_project_id FROM repositories WHERE id = ?', repositoryId)?.primary_project_id : undefined;
     const projectId = root.projectId ?? previous?.project_id ?? associated ?? randomUUID();
-    ctx.db.run('INSERT OR IGNORE INTO projects VALUES (?, ?, ?)', projectId, root.projectName.trim(), root.client?.trim() || null);
+    ctx.db.run('INSERT OR IGNORE INTO projects VALUES (?, ?, ?)', projectId, root.projectName.trim(), null);
+    if (root.client?.trim()) assignClientByNameInTransaction(ctx, projectId, root.client);
     if (repositoryId) ctx.db.run('UPDATE repositories SET primary_project_id = COALESCE(primary_project_id, ?) WHERE id = ?', projectId, repositoryId);
     ctx.db.run('INSERT INTO project_roots VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(device_id, path) DO UPDATE SET project_id = excluded.project_id, repository_id = excluded.repository_id, enabled = excluded.enabled', previous?.id ?? root.id ?? randomUUID(), projectId, repositoryId, root.deviceId, path, worktree, Number(root.enabled ?? true));
     ctx.db.run('UPDATE project_roots SET enabled = 0 WHERE id IN (SELECT root_id FROM root_controls WHERE enabled = 0)');
@@ -91,5 +93,5 @@ export function resolveProject(ctx: AppContext, deviceId: string, cwd: string, h
 }
 
 export function listProjects(ctx: AppContext): Project[] {
-  return ctx.db.all<{ id: string; name: string; client: string | null }>('SELECT * FROM projects ORDER BY name, id').map((project) => ({ ...project, roots: ctx.db.all<RootRow>('SELECT * FROM project_roots WHERE project_id = ? ORDER BY device_id, path', project.id).map((root) => ({ id: root.id, projectId: project.id, projectName: project.name, ...(project.client ? { client: project.client } : {}), deviceId: root.device_id, path: root.path, ...(root.repository_id ? { repositoryId: root.repository_id } : {}), worktree: root.worktree, enabled: Boolean(root.enabled) })) }));
+  return ctx.db.all<{ id: string; name: string; client: string | null; clientId: string | null }>('SELECT p.id, p.name, c.name AS client, c.id AS clientId FROM projects p LEFT JOIN project_clients pc ON pc.project_id = p.id LEFT JOIN clients c ON c.id = pc.client_id ORDER BY p.name, p.id').map((project) => ({ ...project, roots: ctx.db.all<RootRow>('SELECT * FROM project_roots WHERE project_id = ? ORDER BY device_id, path', project.id).map((root) => ({ id: root.id, projectId: project.id, projectName: project.name, ...(project.client ? { client: project.client } : {}), deviceId: root.device_id, path: root.path, ...(root.repository_id ? { repositoryId: root.repository_id } : {}), worktree: root.worktree, enabled: Boolean(root.enabled) })) }));
 }

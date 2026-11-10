@@ -11,3 +11,16 @@ test('datas locais: UTC, virada de dia, DST de 23/25 horas e meia-noite inexiste
   assert.equal(startOfDay('2018-11-04', 'America/Sao_Paulo'), '2018-11-04T03:00:00.000Z');
   assert.throws(() => startOfDay('2026-02-30', 'America/Sao_Paulo'));
 });
+
+test('formatação de exibição: DD/MM/YYYY H:mm:ss no horário de Brasília e ida/volta do campo local', async () => {
+  const { formatDateTime, formatDate, toLocalInput, fromLocalInput } = await import('../../src/core/dates.js');
+  assert.equal(formatDateTime('2026-11-09T12:05:03.000Z'), '09/11/2026 9:05:03');
+  assert.equal(formatDateTime('2026-11-10T02:59:59.000Z'), '09/11/2026 23:59:59');
+  assert.equal(formatDateTime('2026-11-10T03:00:00.000Z'), '10/11/2026 0:00:00');
+  assert.equal(formatDateTime('inválido'), '—');
+  assert.equal(formatDate('2026-11-05'), '05/11/2026');
+  assert.equal(toLocalInput('2026-11-09T17:30:00.000Z'), '2026-11-09T14:30:00');
+  assert.equal(fromLocalInput('2026-11-09T14:30'), '2026-11-09T17:30:00.000Z');
+  assert.equal(fromLocalInput(toLocalInput('2026-11-09T17:30:15.000Z')), '2026-11-09T17:30:15.000Z');
+  assert.throws(() => fromLocalInput('09/11/2026 14:30'), /INVALID_DATE/);
+});

@@ -20,7 +20,10 @@ export function registerSource(ctx: AppContext, source: SourceRegistration): str
 export function publishCaptureManifest(ctx: AppContext) {
   const roots = ctx.db.all<{ id: string; project_id: string; device_id: string; path: string; enabled: number }>('SELECT id, project_id, device_id, path, enabled FROM project_roots');
   const workspaces: unknown = JSON.parse(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'autoWorkspaces'")?.value ?? '[]');
-  atomicPrivate(join(ctx.config.dataDir, 'capture.json'), JSON.stringify({ schemaVersion: 1, policy: policyFor(ctx), sources: listSources(ctx), workspaces, roots: roots.map((root) => ({ id: root.id, projectId: root.project_id, projectName: 'authorized', deviceId: root.device_id, path: root.path, enabled: Boolean(root.enabled) })) }));
+  // Opt-in lido pelo hook: sem ele, nenhum título de task sai da máquina de origem para a fila.
+  let taskTitles = false;
+  try { taskTitles = (JSON.parse(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'operatingConfig'")?.value ?? '{}') as { captureTaskTitles?: unknown }).captureTaskTitles === true; } catch { /* Configuração ilegível mantém a captura desligada. */ }
+  atomicPrivate(join(ctx.config.dataDir, 'capture.json'), JSON.stringify({ schemaVersion: 1, policy: policyFor(ctx), sources: listSources(ctx), workspaces, taskTitles, roots: roots.map((root) => ({ id: root.id, projectId: root.project_id, projectName: 'authorized', deviceId: root.device_id, path: root.path, enabled: Boolean(root.enabled) })) }));
 }
 
 export function listSources(ctx: AppContext): SourceRegistration[] {

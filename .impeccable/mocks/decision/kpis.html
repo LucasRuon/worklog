@@ -1,0 +1,49 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Agora + indicadores</title>
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#121519;color:#e6e9ed;font:15px/1.4 -apple-system,"Noto Sans",sans-serif;padding:24px 28px;display:grid;grid-template-rows:auto auto auto 1fr;gap:18px}
+.tab{font-variant-numeric:tabular-nums}
+header{display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:24px;font-weight:620;letter-spacing:-.03em}.sub{color:#8b939d;font-size:14px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:#181b20;border:1px solid #2a2f36;border-radius:12px;padding:18px 20px}
+.lab{font-size:12px;color:#9ba3ad;text-transform:uppercase;letter-spacing:.08em}
+.big{font-size:44px;font-weight:620;letter-spacing:-.035em;margin:4px 0 2px}
+.live{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.s{border-left:3px solid #5cbf92}.s.w{border-left-color:#e3c48f}
+.s h3{font-size:19px;font-weight:600}.s p{font-size:13px;color:#9ba3ad}
+.s strong{display:block;font-size:17px;margin-top:10px}.s .t{float:right;font-size:22px;font-weight:600}
+.charts{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;min-height:0}
+.cols{display:flex;align-items:flex-end;gap:6px;height:250px;margin-top:16px;border-bottom:1px solid #363c44}
+.cols span{flex:1;background:#5f6b78;border-radius:2px 2px 0 0}.cols span.h{background:#8eaacb}
+.axis{display:flex;justify-content:space-between;font-size:12px;color:#8b939d;margin-top:6px}
+.hb div{display:grid;grid-template-columns:150px 1fr 70px;gap:12px;align-items:center;padding:7px 0;font-size:15px}
+.hb i{height:10px;border-radius:2px;background:#8eaacb;display:block}
+.hb small{grid-column:1/4;color:#8b939d;font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin-top:6px}
+</style></head><body>
+<header><h1>w. worklog · hoje</h1><span class="sub tab">segunda, 9 nov · 14:32 · atualizado há 4 s</span></header>
+<section class="kpis">
+<div class="card"><span class="lab">Dedicação · estimativa</span><div class="big tab" style="color:#8eaacb">4 h 12</div><span class="sub">manual 32 min</span></div>
+<div class="card"><span class="lab">IA no relógio</span><div class="big tab">5 h 03</div><span class="sub">sem sobreposição</span></div>
+<div class="card"><span class="lab">IA acumulada</span><div class="big tab">9 h 47</div><span class="sub">soma por agente</span></div>
+<div class="card"><span class="lab">Sessões</span><div class="big tab">14</div><span class="sub">3 ativas · 1 aguardando</span></div>
+</section>
+<section class="live">
+<div class="card s"><span class="t tab">6 min</span><h3>worklog</h3><p>claude · Local · 2 subagentes</p><strong>Edit · Live.tsx</strong></div>
+<div class="card s"><span class="t tab">2 min</span><h3>portal-alunos</h3><p>codex · Local</p><strong>Bash</strong></div>
+<div class="card s w"><span class="t tab">3 min</span><h3>site-aurora</h3><p>opencode · macmini</p><strong style="color:#e3c48f">Aguardando você</strong></div>
+<div class="card s"><span class="t tab">1 min</span><h3>worklog · Explore</h3><p>claude · subagente</p><strong>Grep</strong></div>
+</section>
+<section class="charts">
+<div class="card"><span class="lab">Atividade por hora · hoje</span>
+<div class="cols"><span style="height:4%"></span><span style="height:2%"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span class="h" style="height:30%"></span><span class="h" style="height:62%"></span><span class="h" style="height:80%"></span><span class="h" style="height:74%"></span><span style="height:40%"></span><span class="h" style="height:88%"></span><span class="h" style="height:60%"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span><span style="height:0"></span></div>
+<div class="axis tab"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span></div></div>
+<div class="card hb"><span class="lab">Dedicação por cliente e projeto</span>
+<small>Kbid Cursos</small>
+<div><span>worklog</span><i style="width:100%"></i><span class="tab">1 h 58</span></div>
+<div><span>portal-alunos</span><i style="width:56%"></i><span class="tab">1 h 06</span></div>
+<small>Clínica Aurora</small>
+<div><span>site-aurora</span><i style="width:37%"></i><span class="tab">44 min</span></div>
+<div><span>agenda-api</span><i style="width:20%"></i><span class="tab">24 min</span></div></div>
+</section>
+</body></html>

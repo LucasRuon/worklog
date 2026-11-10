@@ -1,0 +1,60 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Fluxo ao vivo</title>
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#121519;color:#e6e9ed;font:15px/1.4 -apple-system,"Noto Sans",sans-serif;display:grid;grid-template-rows:auto auto 1fr;}
+.tab{font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 32px;border-bottom:1px solid #2a2f36}
+.brand{font-weight:650;font-size:20px;letter-spacing:-.03em}.brand b{color:#9ba3ad}
+.clock{font-size:34px;font-weight:600;letter-spacing:-.02em}
+.live{display:flex;gap:8px;align-items:center;color:#9ba3ad;font-size:14px}.dot{width:9px;height:9px;border-radius:50%;background:#5cbf92}
+.totals{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;border-bottom:1px solid #2a2f36}
+.totals div{padding:20px 32px;border-right:1px solid #2a2f36}.totals div:last-child{border:0}
+.lab{font-size:13px;color:#9ba3ad;text-transform:uppercase;letter-spacing:.06em}
+.big{font-size:52px;font-weight:620;letter-spacing:-.035em;line-height:1.1;margin-top:6px}
+.sub{font-size:14px;color:#8b939d}
+main{display:grid;grid-template-columns:1fr 520px;min-height:0}
+.projects{padding:22px 32px;border-right:1px solid #2a2f36;overflow:hidden}
+h2{font-size:15px;font-weight:600;color:#c8cdd4;margin-bottom:14px;display:flex;justify-content:space-between}
+.client{font-size:12px;color:#8b939d;text-transform:uppercase;letter-spacing:.08em;margin:16px 0 6px}
+.row{display:grid;grid-template-columns:220px 1fr 90px 90px;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid #22262c}
+.name{font-size:19px;font-weight:560}.name small{display:block;font-size:12px;color:#5cbf92;font-weight:500}
+.bars{display:grid;gap:5px}.bar{height:9px;border-radius:2px}.h{background:#8eaacb}.a{background:#5f6b78}
+.v{text-align:right;font-size:18px}.v.h2{color:#8eaacb}
+.stream{padding:22px 28px;overflow:hidden;background:#15181c}
+.ev{display:grid;grid-template-columns:62px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid #22262c}
+.ev time{color:#8b939d;font-size:14px}
+.ev strong{font-size:17px;font-weight:560;display:block}
+.ev span{font-size:13px;color:#9ba3ad}
+.ev.now{background:#1c3329;margin:0 -28px;padding:12px 28px;border-left:3px solid #5cbf92}
+.ev.wait strong{color:#e3c48f}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border:1px solid #363c44;border-radius:99px;color:#c8cdd4;margin-left:6px}
+</style></head><body>
+<header><div class="brand">w. <b>worklog</b> · ao vivo</div><div class="live"><span class="dot"></span>3 agentes executando · atualizado há 4 s</div><div class="clock tab">14:32 <span class="sub">seg, 9 nov</span></div></header>
+<section class="totals">
+<div><span class="lab">Dedicação hoje · estimativa</span><div class="big tab" style="color:#8eaacb">4 h 12 min</div><span class="sub">automática 3 h 40 · manual 32 min</span></div>
+<div><span class="lab">IA no relógio</span><div class="big tab">5 h 03 min</div><span class="sub">união, sem sobreposição</span></div>
+<div><span class="lab">IA acumulada</span><div class="big tab">9 h 47 min</div><span class="sub">soma por agente</span></div>
+<div><span class="lab">Sessões</span><div class="big tab">14</div><span class="sub">3 ativas · 1 aguardando</span></div>
+</section>
+<main>
+<section class="projects"><h2>Projetos de hoje <span class="sub">dedicação · IA no relógio</span></h2>
+<p class="client">Kbid Cursos</p>
+<div class="row"><div class="name">worklog<small>● claude · Edit</small></div><div class="bars"><div class="bar h" style="width:78%"></div><div class="bar a" style="width:92%"></div></div><div class="v h2 tab">1 h 58</div><div class="v tab">2 h 21</div></div>
+<div class="row"><div class="name">portal-alunos<small>● codex · Bash</small></div><div class="bars"><div class="bar h" style="width:44%"></div><div class="bar a" style="width:58%"></div></div><div class="v h2 tab">1 h 06</div><div class="v tab">1 h 30</div></div>
+<p class="client">Clínica Aurora</p>
+<div class="row"><div class="name">site-aurora<small style="color:#e3c48f">◐ opencode · aguardando você</small></div><div class="bars"><div class="bar h" style="width:30%"></div><div class="bar a" style="width:26%"></div></div><div class="v h2 tab">44 min</div><div class="v tab">40 min</div></div>
+<div class="row"><div class="name">agenda-api<small style="color:#8b939d">encerrada 11:20</small></div><div class="bars"><div class="bar h" style="width:12%"></div><div class="bar a" style="width:20%"></div></div><div class="v h2 tab">24 min</div><div class="v tab">32 min</div></div>
+<p class="client">Sem cliente</p>
+<div class="row"><div class="name">dotfiles<small style="color:#8b939d">encerrada 09:05</small></div><div class="bars"><div class="bar h" style="width:0%"></div><div class="bar a" style="width:8%"></div></div><div class="v h2 tab">—</div><div class="v tab">12 min</div></div>
+</section>
+<aside class="stream"><h2>Agora <span class="sub">eventos observados</span></h2>
+<div class="ev now"><time class="tab">14:32</time><div><strong>Edit · src/web/pages/Live.tsx</strong><span>worklog · claude · turno há 6 min</span><span class="pill">2 subagentes</span></div></div>
+<div class="ev now"><time class="tab">14:31</time><div><strong>Bash em execução</strong><span>portal-alunos · codex · turno há 2 min</span></div></div>
+<div class="ev wait"><time class="tab">14:29</time><div><strong>Aguardando você</strong><span>site-aurora · opencode · parado há 3 min</span></div></div>
+<div class="ev"><time class="tab">14:27</time><div><strong>Commit 4f2a91c</strong><span>worklog · feat(live): painel ao vivo</span></div></div>
+<div class="ev"><time class="tab">14:24</time><div><strong>Arquivo alterado · routes.ts</strong><span>worklog · associação explícita</span></div></div>
+<div class="ev"><time class="tab">14:20</time><div><strong>Turno finalizado</strong><span>portal-alunos · codex · 4 min</span></div></div>
+<div class="ev"><time class="tab">14:12</time><div><strong>Prompt submetido</strong><span>worklog · claude · abre janela de 10 min</span></div></div>
+</aside>
+</main>
+</body></html>

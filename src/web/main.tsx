@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Shell, applyTheme, readTheme, type View } from './Shell.js';
 import { Workspace } from './Workspace.js';
+import { Live } from './pages/Live.js';
 import './styles.css';
 
 applyTheme(readTheme());
@@ -35,6 +36,8 @@ function App() {
     try { const response = await fetch('/api/auth/logout', { method: 'POST' }); setState(response.ok ? 'locked' : 'error'); }
     catch { setState('error'); }
   }
+  // Painel ao vivo: tela cheia sem navegação, para um monitor dedicado.
+  if (state === 'ready' && new URLSearchParams(location.search).get('view') === 'live') return <Live expired={() => setState('locked')} />;
   if (state === 'ready') return <Workspace logout={() => void logout()} expired={() => setState('locked')} />;
   return <Shell view={view} navigate={setView} logout={() => void logout()} authenticated={false}>
     <h1>Um lugar para acompanhar<br className="desktop-break" /> o que você constrói.</h1><p className="intro">Projetos, sessões e evidências, com dedicação humana e execução de IA apresentadas separadamente.</p>

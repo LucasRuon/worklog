@@ -2,19 +2,20 @@ import { assertRecord, exactKeys, uuid, DomainError, type AppContext } from './c
 import { publishCaptureManifest } from '../collectors/source-config.js';
 import { stableId } from './policy.js';
 
-export interface OperatingConfig { revision: number; humanWindowMs: number; idleMs: number; retentionDays: number; syncIntervalMs: number; storageBudgetBytes: number; excludedPaths: string[] }
+export interface OperatingConfig { revision: number; humanWindowMs: number; idleMs: number; retentionDays: number; syncIntervalMs: number; storageBudgetBytes: number; excludedPaths: string[]; captureTaskTitles: boolean }
 export function operatingConfig(ctx: AppContext): OperatingConfig {
   const saved = JSON.parse(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'operatingConfig'")!.value) as Omit<OperatingConfig, 'revision' | 'humanWindowMs'>;
-  return { ...saved, revision: Number(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'configRevision'")!.value), humanWindowMs: Number(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'humanWindowMs'")!.value) };
+  return { ...saved, captureTaskTitles: saved.captureTaskTitles === true, revision: Number(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'configRevision'")!.value), humanWindowMs: Number(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'humanWindowMs'")!.value) };
 }
 export function safetyChanged(ctx: AppContext) { ctx.db.run("UPDATE settings SET value = cast(cast(value AS INTEGER) + 1 AS TEXT) WHERE key = 'reportSafetyRevision'"); }
 export function configure(ctx: AppContext, input: Partial<Omit<OperatingConfig, 'revision'>> & { revision: number }): OperatingConfig {
-  assertRecord(input); exactKeys(input, ['revision'], ['idleMs', 'retentionDays', 'syncIntervalMs', 'storageBudgetBytes', 'excludedPaths', 'humanWindowMs']);
+  assertRecord(input); exactKeys(input, ['revision'], ['idleMs', 'retentionDays', 'syncIntervalMs', 'storageBudgetBytes', 'excludedPaths', 'humanWindowMs', 'captureTaskTitles']);
   if (!Number.isSafeInteger(input.revision) || input.revision < 0) throw new DomainError('INVALID_CONFIGURATION');
   ctx.db.transaction(() => {
     const previous = operatingConfig(ctx); if (input.revision !== previous.revision) throw new DomainError('CONFIG_CHANGED', 409);
     const value = { ...previous, ...input };
     const validInt = (v: number, min: number, max: number) => Number.isSafeInteger(v) && v >= min && v <= max;
+    if (typeof value.captureTaskTitles !== 'boolean') throw new DomainError('INVALID_CONFIGURATION');
     if (!validInt(value.idleMs, 60000, 3600000) || !validInt(value.humanWindowMs, 60000, 3600000) || !validInt(value.retentionDays, 1, 365) || !validInt(value.syncIntervalMs, 1000, 300000) || !validInt(value.storageBudgetBytes, 1048576, 1099511627776) || !Array.isArray(value.excludedPaths) || value.excludedPaths.length > 100 || value.excludedPaths.some((path) => typeof path !== 'string' || !path || path.length > 4096 || path.startsWith('/') || /[\x00-\x1f\\]/.test(path) || path.split('/').some((part) => part === '..' || part === '.' || !part))) throw new DomainError('INVALID_CONFIGURATION');
     const { revision: _, humanWindowMs, ...stored } = value;
     ctx.db.run("UPDATE settings SET value = ? WHERE key = 'operatingConfig'", JSON.stringify(stored));

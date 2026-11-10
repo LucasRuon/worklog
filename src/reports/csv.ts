@@ -2,6 +2,7 @@ import type { ReportData, TimeSummary } from '../core/contracts.js';
 
 export const timeMeasures: [keyof TimeSummary, string, string][] = [
   ['humanEstimatedMs', 'Dedicação humana estimada', 'estimada'], ['humanAdjustedMs', 'Dedicação humana ajustada', 'ajustada'],
+  ['humanManualMs', 'Dedicação humana lançada manualmente', 'manual'],
   ['unassignedHumanMs', 'Dedicação sem atribuição', 'estimada'], ['agentAccumulatedMs', 'Execução acumulada de agentes', 'observada'],
   ['agentWallMs', 'União de execução de relógio', 'observada'], ['sessionSpanMs', 'Duração observada das sessões (inclui pausas)', 'observada'],
 ];

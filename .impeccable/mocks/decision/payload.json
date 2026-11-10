@@ -1,0 +1,43 @@
+{
+  "title": "Painel ao vivo do Worklog: escolha a estrutura",
+  "question": "Três composições para o monitor ao lado da mesa (leitura a ~1 m, sem cliques, tema escuro do Worklog). Todas mostram Hoje ao vivo, todos os projetos com clientes e o que cada agente está executando. Escolha uma, ajuste ou sorteie de novo.",
+  "options": [
+    {
+      "id": "stream",
+      "label": "Fluxo ao vivo",
+      "kicker": "THE ROLL",
+      "thesis": "A tela é um rio de eventos: o que acontece agora entra pela direita e empurra o resto.",
+      "palette": ["#121519", "#181b20", "#e6e9ed", "#5cbf92", "#8eaacb", "#e3c48f"],
+      "materials": ["grafite e neutros frios", "algarismos tabulares grandes", "linhas de 1 px"],
+      "viewport": "Faixa de totais de hoje no topo; à esquerda, projetos por cliente com dedicação e IA lado a lado; à direita, coluna de eventos ao vivo (ferramenta em execução, arquivo, commit) entrando no topo.",
+      "risk": "O fluxo pode virar ruído quando há muitos agentes; precisa agrupar eventos repetidos.",
+      "raised": [
+        { "from": "quadro de partidas", "raise": "Cada linha que muda de estado mantém o destaque até a próxima atualização, em vez de piscar e sumir." }
+      ],
+      "html": ".impeccable/mocks/decision/stream.html"
+    },
+    {
+      "id": "board",
+      "label": "Quadro de sessões",
+      "thesis": "As sessões ativas como um quadro de partidas: ordenadas pelo último sinal, reordenando no lugar.",
+      "palette": ["#121519", "#181b20", "#e6e9ed", "#5cbf92", "#e3c48f", "#8eaacb"],
+      "materials": ["grade fixa de colunas", "algarismos tabulares", "estado em cor só quando muda"],
+      "viewport": "Quadro ocupa 2/3 da tela: projeto, cliente, ferramenta, chamada em curso, subagentes, tempo do turno. Faixa lateral com totais de hoje e ranking de projetos.",
+      "risk": "Quando nada está rodando, o quadro fica vazio; o estado vazio precisa mostrar o resumo do dia.",
+      "html": ".impeccable/mocks/decision/board.html"
+    },
+    {
+      "id": "kpis",
+      "label": "Agora + indicadores",
+      "thesis": "O painel clássico de BI executado com rigor: indicadores, cartões ao vivo e gráficos do dia.",
+      "palette": ["#121519", "#181b20", "#e6e9ed", "#8eaacb", "#5cbf92", "#9ba3ad"],
+      "materials": ["cartões em grade de 12 colunas", "barras e linha do dia", "números grandes"],
+      "viewport": "Quatro indicadores no topo, faixa de cartões das sessões ativas, e embaixo atividade por hora de hoje e tempo por projeto/cliente.",
+      "risk": "É o formato mais previsível da categoria; o 'agora' compete com os gráficos.",
+      "html": ".impeccable/mocks/decision/kpis.html"
+    }
+  ],
+  "reroll": true,
+  "steer": true,
+  "buildPath": { "value": "code", "toggle": false }
+}

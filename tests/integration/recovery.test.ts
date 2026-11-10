@@ -157,8 +157,14 @@ test('configurações: efeito do idle com probe controlado', async () => {
         await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.idle'").n, 0);
         idleMs = 60000; mock.timers.tick(5000); await setImmediate();
         const events = ctx.db.all("SELECT document FROM events WHERE type = 'machine.idle'"); assert.equal(events.length, 1); assert.equal(JSON.parse(events[0].document).payload.reason, 'idle');
+        assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 1);
+        mock.timers.tick(5000); await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 1);
+        idleMs = 100; mock.timers.tick(5000); await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 2);
+        mock.timers.tick(5000); await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 2);
       } finally { await stop(); mock.timers.reset(); await ctx.shutdown(); }
     `, f.ctx.config.dataDir], { timeout: 10000, stdio: 'pipe' });
     assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) n FROM events WHERE type = 'machine.idle'")!.n, 1);
+    // Retorno na partida e depois da ausência; amostras ativas seguidas não repetem o evento.
+    assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) n FROM events WHERE type = 'machine.resume'")!.n, 2);
   } finally { await f.close(); }
 });

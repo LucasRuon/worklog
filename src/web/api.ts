@@ -1,4 +1,5 @@
 import type { Project, Session, TimeSummary, WorkEvent, Tool } from '../core/contracts.js';
+import { formatDateTime } from '../core/dates.js';
 
 export interface Page<T> { items: T[]; nextCursor: string | null }
 export type Activity = WorkEvent & { projectId: string | null; profile: string };
@@ -58,6 +59,8 @@ export function errorMessage(error: unknown) {
     REPORT_DIFF_REQUIRES_FILES: 'Selecione revisões de arquivos para incluir os diffs.',
     CONFIG_CHANGED: 'A configuração mudou em outra operação. Confira os valores atuais antes de salvar.',
     INVALID_CONFIGURATION: 'Confira os limites de tempo, retenção, orçamento e os caminhos relativos sem .. nas exclusões.',
+    INVALID_MANUAL_TIME: 'Informe entre 1 minuto e 24 horas, em um dia que não esteja no futuro.',
+    MANUAL_TIME_NOT_FOUND: 'Este lançamento já foi removido. Atualize a lista.',
     SOURCE_PAUSED: 'Esta fonte está pausada. Habilite-a em Integrações para receber novos sinais.',
   };
   return error.status === 401 ? 'A sessão local expirou. Reabra com npm run cli -- open.' : messages[error.code] ?? 'Não foi possível concluir a operação. Confira os campos e tente novamente.';
@@ -68,11 +71,12 @@ export function duration(ms: number) {
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min` : `${minutes} min`;
 }
 export function timestamp(value: string, timezone = 'America/Sao_Paulo') {
-  return new Intl.DateTimeFormat('pt-BR', { timeZone: timezone, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value));
+  return formatDateTime(value, timezone);
 }
 export const stateLabels: Record<Session['state'], string> = { running: 'Em execução', waiting: 'Aguardando usuário', closed: 'Encerrada', interrupted: 'Interrompida', incomplete: 'Incompleta' };
 export const eventLabels: Record<WorkEvent['type'], string> = {
   'session.start': 'Sessão iniciada / retomada', 'session.end': 'Sessão encerrada', 'session.interrupt': 'Sessão interrompida',
   'turn.submit': 'Prompt submetido', 'turn.start': 'Turno iniciado', 'turn.end': 'Turno finalizado', 'tool.start': 'Ferramenta iniciada', 'tool.end': 'Ferramenta finalizada',
   'human.interaction': 'Dedicação sinalizada', 'focus.change': 'Atribuição de foco', 'machine.idle': 'Pausa / inatividade', 'machine.resume': 'Máquina retomada', 'file.change': 'Arquivo alterado', 'git.commit': 'Commit observado',
+  'task.update': 'Task do agente',
 };
