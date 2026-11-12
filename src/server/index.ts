@@ -35,7 +35,8 @@ async function serveWeb(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-export async function createApp(options: { dataDir: string; port: number; dev?: boolean; observeMachine?: boolean }): Promise<AppContext> {
+/** `collect: false` deixa a captura (sincronização, git, arquivos) com o serviço em segundo plano; o servidor só serve o painel. */
+export async function createApp(options: { dataDir: string; port: number; dev?: boolean; observeMachine?: boolean; collect?: boolean }): Promise<AppContext> {
   if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error('Porta inválida.');
   const store = await openStore(options.dataDir);
   const { db } = store;
@@ -128,8 +129,9 @@ export async function createApp(options: { dataDir: string; port: number; dev?: 
     if (!address || typeof address === 'string') throw new Error('Endereço local indisponível.');
     origin = `http://127.0.0.1:${address.port}`;
     store.config.port = address.port; store.config.origin = origin;
-    synchronize(store);
-    collectorTimer = setInterval(() => { try { synchronize(store); scheduledRetention(store); void pollGit(store).catch(() => {}); void pollFiles(store).catch(() => {}); void pollPullRequests(store).catch(() => {}); } catch { /* A API mantém o último estado consultável. */ } }, 1000);
+    const collect = options.collect !== false;
+    if (collect) synchronize(store);
+    collectorTimer = setInterval(() => { try { if (collect) { synchronize(store); scheduledRetention(store); void pollGit(store).catch(() => {}); void pollFiles(store).catch(() => {}); } void pollPullRequests(store).catch(() => {}); } catch { /* A API mantém o último estado consultável. */ } }, 1000);
     collectorTimer.unref();
     if (options.observeMachine) stopFocus = startFocusObserver(store);
     return { db, config: store.config, shutdown };

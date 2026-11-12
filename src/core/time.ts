@@ -23,7 +23,10 @@ interface Row { id: string; kind: 'human' | 'agent'; session_id: string; project
 export const HUMAN_RULE = 'presence-attribution-v2';
 
 export function projectIntervals(ctx: AppContext) {
-  const version = `${ctx.db.get<{ n: number }>('SELECT COALESCE(max(rowid), 0) AS n FROM events')!.n}:${HUMAN_RULE}`;
+  // Só eventos de presença alteram os intervalos humanos; chamadas de ferramenta (a maioria) não reconstroem nada.
+  const presence = ctx.db.get<{ n: number }>(`SELECT COALESCE(max(rowid), 0) AS n FROM events WHERE type IN (${presenceEventTypes.map((type) => `'${type}'`).join(', ')})`)!.n;
+  const skewed = ctx.db.get<{ n: number }>("SELECT count(*) AS n FROM event_quality WHERE reason = 'clock-skew'")!.n;
+  const version = `${presence}:${skewed}:${HUMAN_RULE}:human-only`;
   if (ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'intervalProjection'")?.value === version) return;
   const humanEvents = ctx.db.all<{ document: string }>(`SELECT document FROM events WHERE type IN (${presenceEventTypes.map((type) => `'${type}'`).join(', ')}) AND NOT EXISTS (SELECT 1 FROM event_quality q WHERE q.event_id = events.event_id AND q.reason = 'clock-skew') ORDER BY occurred_at, origin_seq, event_id`).map((row) => JSON.parse(row.document) as WorkEvent);
   const rows: Row[] = [];
@@ -76,8 +79,6 @@ export function projectIntervals(ctx: AppContext) {
   for (const row of presenceRows(humanEvents.filter(isTracked), projectOf, idleMs)) {
     rows.push({ id: row.id, kind: 'human', session_id: '', project_id: row.projectId, device_id: row.deviceId, source_id: row.sourceId, tool: row.tool, start_at: new Date(row.start).toISOString(), end_at: row.end >= OPEN_END ? '9999-12-31T23:59:59.999Z' : new Date(row.end).toISOString(), quality: 'estimated' });
   }
-  const executions = ctx.db.all<{ id: string; session_id: string; project_id: string | null; device_id: string; source_id: string; tool: Tool; start_at: string; end_at: string }>('SELECT session_executions.id, session_id, project_id, sessions.device_id, sessions.source_id, sources.tool, start_at, end_at FROM session_executions JOIN sessions ON sessions.id = session_id JOIN sources ON sources.id = sessions.source_id');
-  for (const row of executions) rows.push({ ...row, kind: 'agent', quality: 'observed' });
   ctx.db.transaction(() => {
     ctx.db.exec('DELETE FROM intervals');
     rows.forEach((row, index) => ctx.db.run('INSERT INTO intervals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', stableId(row.id, String(index)), row.kind, row.session_id, row.project_id, row.device_id, row.tool, row.start_at, row.end_at, row.quality, row.source_id));
@@ -85,35 +86,75 @@ export function projectIntervals(ctx: AppContext) {
   });
 }
 
-export function deriveTime(ctx: AppContext, filter: ReportFilter, now = Date.now()): TimeSummary {
-  validateFilter(filter); projectIntervals(ctx);
-  const projects = selectedProjects(ctx, filter);
+/** Intervalos de IA vêm direto das execuções de sessão: nada a materializar nem a reconstruir a cada evento. */
+export function agentIntervals(ctx: AppContext, from: string, to: string): Row[] {
+  return ctx.db.all<Omit<Row, 'kind' | 'quality'>>('SELECT session_executions.id, session_id, project_id, sessions.device_id, sessions.source_id, sources.tool, start_at, end_at FROM session_executions JOIN sessions ON sessions.id = session_id JOIN sources ON sources.id = sessions.source_id WHERE start_at < ? AND end_at > ?', to, from).map((row) => ({ ...row, kind: 'agent' as const, quality: 'observed' as const }));
+}
+function unionMs(spans: readonly (readonly [number, number])[]): number {
+  const sorted = [...spans].sort((a, b) => a[0] - b[0]); let total = 0; let until = -Infinity;
+  for (const [start, end] of sorted) { total += Math.max(0, end - Math.max(start, until)); until = Math.max(until, end); }
+  return total;
+}
+
+/** Trabalho independente de projeto, reaproveitado entre as chamadas de uma mesma requisição (resumo geral + um por projeto). */
+export type TimeMemo = Map<string, unknown>;
+interface TimeBase {
+  from: number; to: number; adjustments: Adjustment[];
+  humanByProject: Map<string | null, number>; signalsByProject: Map<string | null, number>;
+  agentByProject: Map<string | null, { start: number; end: number; session: string }[]>;
+}
+function timeBase(ctx: AppContext, filter: ReportFilter, now: number): TimeBase {
   const from = Date.parse(filter.from); const to = Math.min(Date.parse(filter.to), now);
-  const raw = ctx.db.all<Row>('SELECT * FROM intervals WHERE start_at < ? AND end_at > ?', filter.to, filter.from).map((row) => ({ ...row, start_at: new Date(Math.max(from, Date.parse(row.start_at))).toISOString(), end_at: new Date(Math.min(to, Date.parse(row.end_at))).toISOString() })).filter((row) => row.end_at > row.start_at);
-  const agents = raw.filter((row) => row.kind === 'agent' && selectedOrigin(filter, row.device_id, row.tool, row.source_id) && (row.project_id ? projects.has(row.project_id) : filter.includeUnassigned));
-  const sessionSpans = new Map<string, Pick<Interval, 'start' | 'end'>[]>();
-  for (const row of agents) {
-    const spans = sessionSpans.get(row.session_id); const span = { start: row.start_at, end: row.end_at };
-    if (spans) spans.push(span); else sessionSpans.set(row.session_id, [span]);
-  }
-  const humans = raw.filter((row) => row.kind === 'human');
+  const clip = (row: Row) => ({ row, start: Math.max(from, Date.parse(row.start_at)), end: Math.min(to, Date.parse(row.end_at)) });
+  const humans = ctx.db.all<Row>("SELECT * FROM intervals WHERE kind = 'human' AND start_at < ? AND end_at > ?", filter.to, filter.from).map(clip).filter((item) => item.end > item.start).sort((a, b) => a.start - b.start);
   const adjustments = ctx.db.all<{ document: string }>('SELECT a.document FROM time_adjustments a WHERE a.undo_of IS NULL AND NOT EXISTS (SELECT 1 FROM time_adjustments u WHERE u.undo_of = a.id) AND a.start_at < ? AND a.end_at > ?', filter.to, filter.from).map((row) => JSON.parse(row.document) as Adjustment);
-  const points = [...new Set([...humans.flatMap((row) => [row.start_at, row.end_at]), ...adjustments.flatMap((a) => [new Date(Math.max(from, Date.parse(a.start))).toISOString(), new Date(Math.min(to, Date.parse(a.end))).toISOString()])])].filter((at) => Date.parse(at) >= from && Date.parse(at) <= to).sort();
-  let humanEstimated = 0; let unassignedHuman = 0;
+  const adjustmentSpans = adjustments.map((a) => [Date.parse(a.start), Date.parse(a.end)] as const);
+  const points = [...new Set([...humans.flatMap((item) => [item.start, item.end]), ...adjustmentSpans.flatMap(([start, end]) => [Math.max(from, start), Math.min(to, end)])])].filter((at) => at >= from && at <= to).sort((a, b) => a - b);
+  const humanByProject = new Map<string | null, number>(); const signalsByProject = new Map<string | null, number>();
+  const add = (map: Map<string | null, number>, key: string | null, value: number) => map.set(key, (map.get(key) ?? 0) + value);
+  let next = 0; let active: typeof humans = [];
   for (let index = 0; index < points.length - 1; index++) {
     const start = points[index]!; const end = points[index + 1]!;
-    if (adjustments.some((a) => a.start <= start && a.end >= end)) continue;
-    const active = humans.filter((row) => row.start_at <= start && row.end_at >= end);
-    // Projetos simultâneos dividem o trecho em partes iguais; a divisão é global, calculada antes do filtro.
-    const candidates = new Set(active.map((row) => row.project_id));
-    const share = (Date.parse(end) - Date.parse(start)) / candidates.size;
-    for (const project of candidates) {
-      if (!active.some((row) => row.project_id === project && selectedOrigin(filter, row.device_id, row.tool, row.source_id))) continue;
-      if (project && projects.has(project)) humanEstimated += share;
-      else if (!project && (!filter.projectIds.length || filter.includeUnassigned)) unassignedHuman += share;
+    while (next < humans.length && humans[next]!.start <= start) active.push(humans[next++]!);
+    active = active.filter((item) => item.end > start);
+    if (adjustmentSpans.some(([adjustedStart, adjustedEnd]) => adjustedStart <= start && adjustedEnd >= end)) continue;
+    const covering = active.filter((item) => item.end >= end);
+    // Projetos simultâneos dividem o trecho em partes iguais; a divisão é global, calculada antes do filtro de origem.
+    const candidates = new Set(covering.map((item) => item.row.project_id));
+    const share = (end - start) / candidates.size;
+    for (const project of candidates) if (covering.some((item) => item.row.project_id === project && selectedOrigin(filter, item.row.device_id, item.row.tool, item.row.source_id))) add(humanByProject, project, share);
+  }
+  for (const item of humans) if (selectedOrigin(filter, item.row.device_id, item.row.tool, item.row.source_id)) add(signalsByProject, item.row.project_id, 1);
+  const agentByProject = new Map<string | null, { start: number; end: number; session: string }[]>();
+  for (const row of agentIntervals(ctx, filter.from, filter.to)) {
+    const start = Math.max(from, Date.parse(row.start_at)); const end = Math.min(to, Date.parse(row.end_at));
+    if (!(end > start) || !selectedOrigin(filter, row.device_id, row.tool, row.source_id)) continue;
+    const list = agentByProject.get(row.project_id); const span = { start, end, session: row.session_id };
+    if (list) list.push(span); else agentByProject.set(row.project_id, [span]);
+  }
+  return { from, to, adjustments, humanByProject, signalsByProject, agentByProject };
+}
+
+export function deriveTime(ctx: AppContext, filter: ReportFilter, now = Date.now(), memo?: TimeMemo): TimeSummary {
+  validateFilter(filter); projectIntervals(ctx);
+  const projects = selectedProjects(ctx, filter);
+  const memoKey = `time:${filter.from}|${filter.to}|${now}|${filter.deviceIds ?? ''}|${filter.tools ?? ''}|${filter.sourceIds ?? ''}`;
+  let base = memo?.get(memoKey) as TimeBase | undefined;
+  if (!base) { base = timeBase(ctx, filter, now); memo?.set(memoKey, base); }
+  const { from, to, adjustments } = base;
+  const unassignedCounts = !filter.projectIds.length || filter.includeUnassigned;
+  let humanEstimated = 0; let unassignedHuman = 0; let humanSignalCount = 0;
+  for (const project of projects) { humanEstimated += base.humanByProject.get(project) ?? 0; humanSignalCount += base.signalsByProject.get(project) ?? 0; }
+  if (unassignedCounts) { unassignedHuman = base.humanByProject.get(null) ?? 0; humanSignalCount += base.signalsByProject.get(null) ?? 0; }
+  const humanEstimatedMs = Math.round(humanEstimated); const unassignedHumanMs = Math.round(unassignedHuman);
+  const agentSpans: [number, number][] = []; const bySession = new Map<string, [number, number][]>();
+  for (const [project, spans] of base.agentByProject) {
+    if (!(project ? projects.has(project) : filter.includeUnassigned)) continue;
+    for (const span of spans) {
+      agentSpans.push([span.start, span.end]);
+      const list = bySession.get(span.session); if (list) list.push([span.start, span.end]); else bySession.set(span.session, [[span.start, span.end]]);
     }
   }
-  const humanEstimatedMs = Math.round(humanEstimated); const unassignedHumanMs = Math.round(unassignedHuman);
   let humanAdjustedMs = 0;
   for (const a of adjustments) {
     if (!projects.has(a.projectId) || !selectedOrigin(filter, a.deviceId, 'focus', a.sourceId)) continue;
@@ -121,14 +162,14 @@ export function deriveTime(ctx: AppContext, filter: ReportFilter, now = Date.now
     const left = Math.max(start, from); const right = Math.min(Date.parse(a.end), to);
     if (right > left) humanAdjustedMs += Number(BigInt(a.nextMs) * BigInt(right - start) / span - BigInt(a.nextMs) * BigInt(left - start) / span);
   }
-  const sessions = listSessions(ctx, filter, now);
+  const sessions = listSessions(ctx, filter, now, memo);
   return {
     humanEstimatedMs, humanAdjustedMs, humanManualMs: manualTimeMs(ctx, filter), unassignedHumanMs,
-    agentAccumulatedMs: [...sessionSpans.values()].reduce((total, spans) => total + unionDuration(spans), 0),
-    agentWallMs: unionDuration(agents.map((row) => ({ start: row.start_at, end: row.end_at }))),
+    agentAccumulatedMs: [...bySession.values()].reduce((total, spans) => total + unionMs(spans), 0),
+    agentWallMs: unionMs(agentSpans),
     sessionSpanMs: sessions.reduce((total, session) => total + Math.max(0, Math.min(to, Date.parse(session.lastEventAt)) - Math.max(from, Date.parse(session.startedAt))), 0),
     incompleteSessions: sessions.filter((session) => !session.complete).length, ruleVersion: adjustments.length ? `${HUMAN_RULE}+adjustments-v1` : HUMAN_RULE,
-    humanSignalCount: humans.filter((row) => selectedOrigin(filter, row.device_id, row.tool, row.source_id) && (row.project_id ? projects.has(row.project_id) : !filter.projectIds.length || filter.includeUnassigned)).length,
+    humanSignalCount,
   };
 }
 
@@ -158,7 +199,7 @@ export function deriveSeries(ctx: AppContext, filter: ReportFilter, now = Date.n
   const dayIndex = new Map(days.map((day, index) => [day.date, index]));
   const heat = new Map<string, number>();
   const formatter = new Intl.DateTimeFormat('en-US', { timeZone: filter.timezone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', hourCycle: 'h23' });
-  const agents = ctx.db.all<Row>("SELECT * FROM intervals WHERE kind = 'agent' AND start_at < ? AND end_at > ?", filter.to, filter.from)
+  const agents = agentIntervals(ctx, filter.from, filter.to)
     .filter((row) => selectedOrigin(filter, row.device_id, row.tool, row.source_id) && (row.project_id ? projects.has(row.project_id) : filter.includeUnassigned))
     .map((row) => [Math.max(from, Date.parse(row.start_at)), Math.min(to, Date.parse(row.end_at))] as const)
     .filter(([start, finish]) => Number.isFinite(start) && Number.isFinite(finish) && finish > start)

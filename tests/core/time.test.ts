@@ -207,3 +207,23 @@ test('sinal explícito aceita projeto só do macmini (sem pasta local) e recusa 
     assert.throws(() => signalHuman(f.ctx, randomUUID()), /UNKNOWN_PROJECT/);
   } finally { await f.close(); }
 });
+
+test('desempenho: resumo com base compartilhada é igual ao cálculo avulso e intervalos de IA não são gravados', async () => {
+  const f = await fixture();
+  try {
+    f.emit('human.interaction', '2026-11-05T08:50:00.000Z', { kind: 'explicit' });
+    for (const [id, start, end] of [['one', '09:00', '10:00'], ['two', '09:30', '10:30']]) {
+      f.emit('session.start', `2026-11-05T${start}:00.000Z`, { reason: 'startup' }, { nativeSessionId: id });
+      f.emit('turn.start', `2026-11-05T${start}:00.000Z`, {}, { nativeSessionId: id });
+      f.emit('turn.end', `2026-11-05T${end}:00.000Z`, { outcome: 'completed' }, { nativeSessionId: id });
+    }
+    projectSessions(f.ctx, f.allEvents());
+    const now = Date.parse('2026-11-06T00:00:00.000Z'); const memo = new Map<string, unknown>();
+    const alone = deriveTime(f.ctx, f.filter, now);
+    assert.deepEqual(deriveTime(f.ctx, f.filter, now, memo), alone);
+    assert.deepEqual(deriveTime(f.ctx, f.filter, now, memo), alone);
+    assert.equal(alone.agentWallMs, 90 * 60_000);
+    assert.equal(alone.agentAccumulatedMs, 120 * 60_000);
+    assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) AS n FROM intervals WHERE kind = 'agent'")!.n, 0);
+  } finally { await f.close(); }
+});

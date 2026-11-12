@@ -9,7 +9,7 @@ export interface Summary {
 }
 export type Source = import('../collectors/source-status.js').SourceStatus;
 export interface Settings {
-  deviceId: string; timezone: string; humanWindowMs: number; idleMs: number; focusObservation: string;
+  deviceId: string; timezone: string; firstDay?: string | null; humanWindowMs: number; idleMs: number; focusObservation: string;
   devices?: { id: string; name: string }[];
   automation?: { workspaces: string[]; localService: { installed: boolean; running: boolean; manager: string }; remotes: { host: string; device_id: string | null; last_sync_at: string | null; last_error: string | null; clock_skew_ms: number; enabled: number }[] };
 }

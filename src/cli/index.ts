@@ -21,6 +21,7 @@ import { pollGit } from '../collectors/git.js';
 import { pollFiles, stopFiles } from '../collectors/files.js';
 import { queueCodex, isCodexSupported } from '../collectors/codex.js';
 import { configureHistory, exportHistory, importHistory } from '../collectors/history.js';
+import { serviceStatus } from './service.js';
 import { listPullRequests, pullRequestSyncState, syncPullRequests } from '../providers/github.js';
 import { backupData, restoreData, runRetention, storageUsage } from '../core/maintenance.js';
 import { configure, operatingConfig, setRootEnabled } from '../core/configuration.js';
@@ -155,7 +156,10 @@ async function main() {
     return;
   }
   if (command !== 'serve') throw new Error('Comando desconhecido. Execute npm run cli -- help.');
-  const ctx = await createApp({ dataDir, port, dev: values.dev, observeMachine: true });
+  // Com o serviço em segundo plano rodando, ele captura; o servidor só serve o painel (sem observador nem varreduras duplicadas).
+  const delegated = (await serviceStatus(dataDir).catch(() => null))?.running === true;
+  const ctx = await createApp({ dataDir, port, dev: values.dev, observeMachine: !delegated, collect: !delegated });
+  if (delegated) console.log('Captura feita pelo serviço em segundo plano; este servidor só mostra o painel.');
   console.log(`Worklog disponível em ${ctx.config.origin}\nAutenticar navegador: npm run cli -- open`);
   let stopping = false;
   const stop = () => {

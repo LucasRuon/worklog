@@ -265,7 +265,8 @@ export async function handleRoutes(ctx: AppContext, req: IncomingMessage, res: S
     if (path === '/api/settings' && method === 'GET') {
       const remotes = ctx.db.all<{ host: string; device_id: string | null; last_sync_at: string | null; last_error: string | null; clock_skew_ms: number; enabled: number }>('SELECT host, device_id, last_sync_at, last_error, clock_skew_ms, enabled FROM remote_hosts');
       const devices = ctx.db.all<{ id: string; name: string }>('SELECT id, name FROM devices').map((device) => ({ id: device.id, name: device.id === ctx.config.deviceId ? 'Local' : remotes.find((remote) => remote.device_id === device.id)?.host ?? device.name }));
-      json(res, 200, { deviceId: ctx.config.deviceId, timezone: ctx.config.timezone, humanWindowMs: Number(setting(ctx, 'humanWindowMs')), idleMs: operatingConfig(ctx).idleMs, focusObservation: setting(ctx, 'focusObservation') ?? 'not-started', devices, automation: { workspaces: workspaces(ctx), localService: await serviceStatus(ctx.config.dataDir), remotes } }); return;
+      const firstEvent = ctx.db.get<{ at: string | null }>('SELECT MIN(occurred_at) AS at FROM events')?.at;
+      json(res, 200, { deviceId: ctx.config.deviceId, timezone: ctx.config.timezone, firstDay: firstEvent ? dateInZone(new Date(firstEvent), ctx.config.timezone) : null, humanWindowMs: Number(setting(ctx, 'humanWindowMs')), idleMs: operatingConfig(ctx).idleMs, focusObservation: setting(ctx, 'focusObservation') ?? 'not-started', devices, automation: { workspaces: workspaces(ctx), localService: await serviceStatus(ctx.config.dataDir), remotes } }); return;
     }
     if (path === '/api/focus' && method === 'POST') {
       const body = await readBody(req); exactKeys(body, [], ['projectId', 'pause']);
@@ -293,7 +294,8 @@ export async function handleRoutes(ctx: AppContext, req: IncomingMessage, res: S
         const items = rows.slice(0, page.limit).map((row) => ({ ...JSON.parse(row.document) as WorkEvent, projectId: row.project_id, profile: row.profile }));
         const last = items.at(-1); json(res, 200, { items, nextCursor: rows.length > page.limit && last ? page.encode(last.occurredAt, last.eventId) : null }); return;
       }
-      const sessions = listSessions(ctx, filter);
+      const now = Date.now(); const memo = new Map<string, unknown>();
+      const sessions = listSessions(ctx, filter, now, memo);
       if (path === '/api/sessions') {
         const page = pageOptions(url, filter);
         const remaining = page.after ? sessions.filter((session) => session.lastEventAt < page.after!.at || (session.lastEventAt === page.after!.at && session.id > page.after!.id)) : sessions;
@@ -304,8 +306,8 @@ export async function handleRoutes(ctx: AppContext, req: IncomingMessage, res: S
       const query = eventsQuery(ctx, filter);
       const selected = selectedProjects(ctx, filter);
       const projects = listProjects(ctx).filter((project) => selected.has(project.id));
-      json(res, 200, { summary: deriveTime(ctx, filter), sessionCount: sessions.length, activityCount: ctx.db.get<{ n: number }>(`SELECT count(*) AS n FROM ${query.tables} WHERE ${query.clauses.join(' AND ')}`, ...query.parameters)!.n,
-        byProject: projects.slice(0, 20).map((project) => ({ id: project.id, name: project.name, client: project.client, summary: deriveTime(ctx, { ...filter, projectIds: [project.id], includeUnassigned: false }), sessionCount: sessions.filter((session) => session.projectId === project.id).length })), totalProjects: projects.length,
+      json(res, 200, { summary: deriveTime(ctx, filter, now, memo), sessionCount: sessions.length, activityCount: ctx.db.get<{ n: number }>(`SELECT count(*) AS n FROM ${query.tables} WHERE ${query.clauses.join(' AND ')}`, ...query.parameters)!.n,
+        byProject: projects.slice(0, 20).map((project) => ({ id: project.id, name: project.name, client: project.client, summary: deriveTime(ctx, { ...filter, projectIds: [project.id], includeUnassigned: false }, now, memo), sessionCount: sessions.filter((session) => session.projectId === project.id).length })), totalProjects: projects.length,
       }); return;
     }
     json(res, 404, { error: 'Rota não implementada nesta etapa.' });

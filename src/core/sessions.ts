@@ -108,12 +108,31 @@ export function rebuildSessions(ctx: AppContext) {
   projectSessions(ctx, ctx.db.all<{ document: string }>('SELECT document FROM events ORDER BY installation_id, origin_seq').map((row) => JSON.parse(row.document) as WorkEvent));
 }
 
-export function listSessions(ctx: AppContext, filter: ReportFilter, now = Date.now()): Session[] {
+/** Eventos importados do histórico por sessão: uma consulta agrupada, reaproveitada até a próxima importação. */
+const importedCache = new WeakMap<AppContext, { key: string; counts: Map<string, number> }>();
+function importedEvents(ctx: AppContext) {
+  const state = ctx.db.get<{ n: number; last: number | null }>('SELECT count(*) AS n, max(rowid) AS last FROM event_provenance')!;
+  const key = `${state.n}:${state.last}`; const cached = importedCache.get(ctx);
+  if (cached?.key === key) return cached.counts;
+  const counts = new Map<string, number>();
+  for (const row of ctx.db.all<{ source_id: string; session: string | null; agent: string; n: number }>("SELECT e.source_id, json_extract(e.document, '$.nativeSessionId') AS session, coalesce(json_extract(e.document, '$.nativeAgentId'), '') AS agent, count(*) AS n FROM event_provenance p JOIN events e ON e.event_id = p.event_id GROUP BY 1, 2, 3")) counts.set(`${row.source_id}\0${row.session}\0${row.agent}`, row.n);
+  importedCache.set(ctx, { key, counts }); return counts;
+}
+
+function cached<T>(memo: Map<string, unknown> | undefined, key: string, make: () => T): T {
+  if (!memo) return make();
+  if (!memo.has(key)) memo.set(key, make());
+  return memo.get(key) as T;
+}
+
+/** `memo` reaproveita a leitura das sessões entre chamadas de uma mesma requisição (resumo geral + um por projeto). */
+export function listSessions(ctx: AppContext, filter: ReportFilter, now = Date.now(), memo?: Map<string, unknown>): Session[] {
   validateFilter(filter); const projects = selectedProjects(ctx, filter);
-  const rows = ctx.db.all<{ id: string; source_id: string; device_id: string; native_session_id: string; native_agent_id: string | null; parent_session_id: string | null; project_id: string | null; started_at: string; last_event_at: string; ended_at: string | null; state: Session['state']; complete: number; event_count: number; tool: Tool; profile: string }>('SELECT sessions.*, sources.tool, sources.profile FROM sessions JOIN sources ON sources.id = sessions.source_id WHERE started_at < ? AND (last_event_at > ? OR (started_at = last_event_at AND started_at >= ?)) ORDER BY last_event_at DESC, sessions.id', filter.to, filter.from, filter.from);
+  const rows = cached(memo, `sessions:${filter.from}|${filter.to}`, () => ctx.db.all<{ id: string; source_id: string; device_id: string; native_session_id: string; native_agent_id: string | null; parent_session_id: string | null; project_id: string | null; started_at: string; last_event_at: string; ended_at: string | null; state: Session['state']; complete: number; event_count: number; tool: Tool; profile: string }>('SELECT sessions.*, sources.tool, sources.profile FROM sessions JOIN sources ON sources.id = sessions.source_id WHERE started_at < ? AND (last_event_at > ? OR (started_at = last_event_at AND started_at >= ?)) ORDER BY last_event_at DESC, sessions.id', filter.to, filter.from, filter.from));
+  const importedCounts = cached(memo, 'imported', () => importedEvents(ctx));
   return rows.filter((row) => (row.project_id ? projects.has(row.project_id) : filter.includeUnassigned) && selectedOrigin(filter, row.device_id, row.tool, row.source_id)).map((row) => {
     const stale = row.state === 'running' && now - Date.parse(row.last_event_at) > 5 * 60_000;
-    const imported = ctx.db.get<{ n: number }>("SELECT count(*) AS n FROM events e JOIN event_provenance p ON p.event_id = e.event_id WHERE e.source_id = ? AND json_extract(e.document, '$.nativeSessionId') = ? AND coalesce(json_extract(e.document, '$.nativeAgentId'), '') = ?", row.source_id, row.native_session_id, row.native_agent_id ?? '')!.n;
+    const imported = importedCounts.get(`${row.source_id}\0${row.native_session_id}\0${row.native_agent_id ?? ''}`) ?? 0;
     const provenance: Session['provenance'] = imported === 0 ? 'observed' : imported === row.event_count ? 'imported' : 'mixed';
     return { id: row.id, sourceId: row.source_id, deviceId: row.device_id, nativeSessionId: row.native_session_id, nativeAgentId: row.native_agent_id, parentSessionId: row.parent_session_id, projectId: row.project_id, startedAt: row.started_at, lastEventAt: row.last_event_at, endedAt: row.ended_at, state: stale ? 'incomplete' : row.state, complete: Boolean(row.complete) && !stale, eventCount: row.event_count, tool: row.tool, profile: row.profile, provenance };
   });

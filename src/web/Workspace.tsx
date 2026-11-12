@@ -21,6 +21,13 @@ export function Workspace({ logout, expired }: { logout: () => void; expired: ()
   const [from, setFrom] = useState(today); const [to, setTo] = useState(today); const [projects, setProjects] = useState<string[]>(initialProject ? [initialProject] : []);
   const [tool, setTool] = useState(''); const [device, setDevice] = useState(''); const [unassigned, setUnassigned] = useState(false);
   const [source, setSource] = useState('');
+  // Ao abrir, o período vai do primeiro dia com dados até hoje; sem isso o painel mostraria só o dia atual.
+  const [rangeReady, setRangeReady] = useState(false); const rangeTouched = useRef(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    api<Settings>('/api/settings', { signal: controller.signal }).then((settings) => { if (!rangeTouched.current && settings.firstDay && settings.firstDay < today) setFrom(settings.firstDay); }).catch(() => undefined).finally(() => { if (!controller.signal.aborted) setRangeReady(true); });
+    return () => controller.abort();
+  }, []);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
   const [projectTarget, setProjectTarget] = useState<string | null>(initialProject);
   const [data, setData] = useState<DashboardData | null>(null); const [loadedKey, setLoadedKey] = useState(''); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
@@ -44,9 +51,16 @@ export function Workspace({ logout, expired }: { logout: () => void; expired: ()
   const refresh = () => { setExpanded(false); setRevision((value) => value + 1); };
   useEffect(() => () => { sessionRequest.current?.abort(); dialog.current?.close(); }, [query]);
 
-  useEffect(() => { if (expanded || moreBusy) return; const timer = setInterval(refresh, 5000); return () => clearInterval(timer); }, [expanded, moreBusy]);
+  // Atualiza a cada 15 s e só com a aba visível; ao voltar para ela, atualiza na hora.
+  useEffect(() => {
+    if (expanded || moreBusy) return;
+    const tick = () => { if (!document.hidden) refresh(); };
+    const timer = setInterval(tick, 15_000); document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick); };
+  }, [expanded, moreBusy]);
   useEffect(() => { setExpanded(false); }, [query]);
   useEffect(() => {
+    if (!rangeReady) return;
     if (!query || filterError) { setLoading(false); return; }
     const controller = new AbortController(); setLoading(true); setError('');
     const options = { signal: controller.signal };
@@ -60,7 +74,7 @@ export function Workspace({ logout, expired }: { logout: () => void; expired: ()
       setError(errorMessage(error)); setLoading(false);
     });
     return () => controller.abort();
-  }, [query, revision]);
+  }, [query, revision, rangeReady]);
 
   async function more(kind: 'projects' | 'sessions' | 'activity') {
     const cursor = data?.[kind].nextCursor; if (!cursor || moreBusy) return;
@@ -87,7 +101,7 @@ export function Workspace({ logout, expired }: { logout: () => void; expired: ()
   return <Shell view={view} navigate={(view) => { setView(view); setProjectTarget(null); history.replaceState(null, '', `?view=${view}`); }} logout={logout} authenticated>
     <div className="page-heading"><div><h1>{views[view]}</h1><p className="intro">{view === 'overview' ? 'Seu trabalho por projeto, com origem e natureza de cada medida.' : view === 'projects' ? 'Identidades estáveis, mesmo em clones, pastas e worktrees diferentes.' : view === 'activity' ? 'Metadados observados, sem prompts ou transcrições brutas.' : view === 'files' ? 'Revisões entre commits, diffs e relações com grau de confiança visível.' : view === 'commits' ? 'Mensagens, autoria e arquivos do Git, preservados por repositório.' : view === 'exports' ? 'Selecione projetos e período, confira a prévia e baixe seu relatório.' : 'Compatibilidade, dados recebidos e regras de estimativa.'}</p></div><button className="button-flat" onClick={refresh} disabled={loading || moreBusy}>Atualizar</button></div>
     {view !== 'integrations' && <section className="filter-bar" aria-label="Filtros do histórico">
-      <label>De<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
+      <label>De<input type="date" value={from} onChange={(event) => { rangeTouched.current = true; setFrom(event.target.value); }} /></label>
       <label>Até (inclusive)<input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} /></label>
       <div className="filter-field"><span aria-hidden="true">Projetos</span><details className="project-filter"><summary>{projects.length ? `${projects.length} projeto(s)` : 'Todos os projetos'}</summary><div>{clientGroups.length > 0 && <><span className="filter-group-label">Clientes</span>{clientGroups.map((group) => { const all = group.ids.every((id) => projects.includes(id)); return <label key={group.id}><input type="checkbox" checked={all} onChange={(event) => selectProjects(event.target.checked ? [...new Set([...projects, ...group.ids])] : projects.filter((id) => !group.ids.includes(id)))} />{group.name} <small>({group.ids.length})</small></label>; })}<span className="filter-group-label">Projetos</span></>}{data?.projects.items.map((project) => <label key={project.id}><input type="checkbox" checked={projects.includes(project.id)} onChange={(event) => selectProjects(event.target.checked ? [...projects, project.id] : projects.filter((id) => id !== project.id))} />{project.name}</label>)}{!data?.projects.items.length && <p>Nenhum projeto cadastrado.</p>}<button className="button-flat" onClick={() => selectProjects([])}>{view === 'exports' ? 'Limpar seleção' : 'Todos os projetos'}</button></div></details></div>
       <label>Ferramenta<select value={tool} onChange={(event) => setTool(event.target.value)}><option value="">Todas</option>{(['claude', 'codex', 'opencode', 'git', 'files', 'focus'] as Tool[]).map((tool) => <option key={tool} value={tool}>{tool === 'focus' ? 'Sinais explícitos' : tool === 'git' ? 'Git' : tool === 'files' ? 'Arquivos' : tool}</option>)}</select></label>
