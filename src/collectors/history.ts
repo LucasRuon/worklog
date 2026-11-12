@@ -14,10 +14,13 @@ import { normalizeOpenCode } from './opencode.js';
 import { nativeSession, readNativePage, validateNativeSchema, type ScanCursor } from './opencode-store.js';
 import { scanCommits } from './git.js';
 import { openCodeLogRecords } from './opencode-history.js';
+import { openCodeDbV2Records } from './opencode-db-v2.js';
+import { claudeTranscriptRecords } from './claude-transcripts.js';
 import { codexRolloutRecords, type CodexHistoryRecord } from './codex-history.js';
 import { canonicalCodexEvent } from './codex-receipts.js';
+import { isCodexSupported } from './codex.js';
 
-const parsers = ['normalized-v1', 'opencode-db-1.19.5', 'opencode-log-v1', 'codex-receipts-v1', 'codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0', 'git-v1'] as const;
+const parsers = ['normalized-v1', 'opencode-db-1.19.5', 'opencode-log-v1', 'opencode-db-v2', 'claude-transcript-v1', 'codex-receipts-v1', 'codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0', 'git-v1'] as const;
 type Parser = typeof parsers[number];
 type Range = { from: string; to: string };
 type Checkpoint = { offset: number; resource: string; digest: string };
@@ -35,7 +38,8 @@ export function configureHistory(ctx: AppContext, sourceId: string, input: { par
   const source = sourceFor(ctx, sourceId); assertRecord(input); exactKeys(input, ['parser', 'path']);
   if (!parsers.includes(input.parser as Parser) || !isAbsolute(input.path) || input.path.length > 4096 || /[\x00-\x1f]/.test(input.path)) throw new DomainError('HISTORY_INPUT_INVALID');
   if (input.parser === 'git-v1' && source.tool !== 'git') throw new DomainError('HISTORY_SOURCE_MISMATCH');
-  if (input.parser === 'opencode-log-v1' && source.tool !== 'opencode') throw new DomainError('HISTORY_SOURCE_MISMATCH');
+  if (['opencode-log-v1', 'opencode-db-v2'].includes(input.parser) && source.tool !== 'opencode') throw new DomainError('HISTORY_SOURCE_MISMATCH');
+  if (input.parser === 'claude-transcript-v1' && source.tool !== 'claude') throw new DomainError('HISTORY_SOURCE_MISMATCH');
   if (['codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser) && source.tool !== 'codex') throw new DomainError('HISTORY_SOURCE_MISMATCH');
   ctx.db.run('INSERT INTO history_inputs VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET parser = excluded.parser, path = excluded.path', sourceId, input.parser, input.path);
 }
@@ -117,7 +121,7 @@ function* legacyRecords(ctx: AppContext, path: string, source: SourceRegistratio
 }
 
 function* receiptRecords(ctx: AppContext, source: SourceRegistration): Generator<RecordInput> {
-  if (source.tool !== 'codex' || source.version !== '0.167.0') throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (source.tool !== 'codex' || !isCodexSupported(source.version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const directory = join(ctx.config.dataDir, 'codex-receipts');
   let names: string[];
   try { names = readdirSync(directory).filter((name) => /^[a-f0-9-]{36}\.json$/.test(name)).sort(); }
@@ -163,7 +167,7 @@ export async function importHistory(ctx: AppContext, sourceId: string, range: Ra
       // Git indexes repository objects independently of a report period; querying applies [from,to).
       result.complete = !result.warnings.length; return result;
     }
-    const records: Iterable<RecordInput | CodexHistoryRecord> | null = input.parser === 'normalized-v1' ? archiveRecords(input.path, source, checkpoint) : input.parser === 'opencode-db-1.19.5' ? legacyRecords(ctx, input.path, source) : input.parser === 'opencode-log-v1' ? openCodeLogRecords(ctx, source, input.path) : input.parser === 'codex-receipts-v1' ? receiptRecords(ctx, source) : ['codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser) ? codexRolloutRecords(ctx, source, input.path, input.parser !== 'codex-rollout-0.167.0', ['codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser), input.parser === 'codex-rollout-v4-0.167.0') : null;
+    const records: Iterable<RecordInput | CodexHistoryRecord> | null = input.parser === 'normalized-v1' ? archiveRecords(input.path, source, checkpoint) : input.parser === 'opencode-db-1.19.5' ? legacyRecords(ctx, input.path, source) : input.parser === 'opencode-log-v1' ? openCodeLogRecords(ctx, source, input.path) : input.parser === 'opencode-db-v2' ? openCodeDbV2Records(ctx, source, input.path) : input.parser === 'claude-transcript-v1' ? claudeTranscriptRecords(ctx, source, input.path, range.from) : input.parser === 'codex-receipts-v1' ? receiptRecords(ctx, source) : ['codex-rollout-0.167.0', 'codex-rollout-v2-0.167.0', 'codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser) ? codexRolloutRecords(ctx, source, input.path, input.parser !== 'codex-rollout-0.167.0', ['codex-rollout-v3-0.167.0', 'codex-rollout-v4-0.167.0'].includes(input.parser), input.parser === 'codex-rollout-v4-0.167.0') : null;
     if (!records) throw new DomainError('HISTORY_FORMAT_UNSUPPORTED');
     for (const item of records) {
       if (options.signal?.aborted) { warn('HISTORY_CANCELLED'); break; }
@@ -190,7 +194,7 @@ export async function importHistory(ctx: AppContext, sourceId: string, range: Ra
       if (!event.cwd || resolveProject(ctx, event.deviceId, event.cwd).state !== 'matched') throw new DomainError('HISTORY_ROOT_UNAUTHORIZED');
       const captured = prepareCapture(ctx.config.dataDir, [event]);
       // Match the live queue's canonical cwd without rewriting archive identities.
-      if (input.parser === 'opencode-db-1.19.5' || input.parser === 'opencode-log-v1') event = captured.events[0]!;
+      if (input.parser === 'opencode-db-1.19.5' || input.parser === 'opencode-log-v1' || input.parser === 'opencode-db-v2' || input.parser === 'claude-transcript-v1') event = captured.events[0]!;
       // Legacy observers clamp the session-start time to the opt-in boundary. Preserve that immutable observation.
       if (input.parser === 'opencode-db-1.19.5' && event.type === 'session.start' && ctx.db.get('SELECT event_id FROM events WHERE event_id = ?', event.eventId)) { result.skipped++; await setImmediate(); continue; }
       const appended = appendEvent(ctx, event, (inserted) => {

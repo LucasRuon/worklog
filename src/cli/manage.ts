@@ -7,7 +7,7 @@ import { setWorkspaces } from '../core/automation.js';
 import { configureOpenCodePlugin } from './automation.js';
 import { DomainError } from '../core/contracts.js';
 import { configureClaudeHooks } from './hooks.js';
-import { supportedClaudeVersions, drainQueue } from '../collectors/claude.js';
+import { isClaudeSupported, drainQueue } from '../collectors/claude.js';
 import { registerSource } from '../collectors/source-config.js';
 import { stableId } from '../core/policy.js';
 import { describeAgent, exportBatch, validateEnvelope } from '../remote/protocol.js';
@@ -17,7 +17,7 @@ import { runAgent } from '../core/runner.js';
 import { exportGitPacket } from '../remote/git.js';
 import { exportFilePacket } from '../remote/files.js';
 import { stopFiles } from '../collectors/files.js';
-import { supportedOpenCodePluginVersions } from '../collectors/plugins/opencode-projector.js';
+import { isOpenCodeV2 } from '../collectors/plugins/opencode-projector.js';
 
 const execute = promisify(execFile);
 export async function management(argv: string[]) {
@@ -38,14 +38,14 @@ export async function management(argv: string[]) {
       if (action === 'configure') { console.log(JSON.stringify({ workspaces: values.workspace ?? [] })); return; }
       const pluginPath = resolve(values['plugin-path'] ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'opencode/plugins/worklog.js'));
       const version = action === 'install' ? (await execute('opencode', ['--version'], { timeout: 10_000 })).stdout.match(/\d+\.\d+\.\d+/)?.[0] : undefined;
-      if (action === 'install' && (!version || !supportedOpenCodePluginVersions.includes(version))) throw new DomainError('OPENCODE_VERSION_UNSUPPORTED');
+      if (action === 'install' && !isOpenCodeV2(version)) throw new DomainError('OPENCODE_VERSION_UNSUPPORTED');
       console.log(JSON.stringify(await configureOpenCodePlugin(ctx, pluginPath, action as 'install' | 'remove', version))); return;
     }
     if (command === 'agent' && action === 'configure' && values.config && values.workspace) {
       setWorkspaces(ctx, values.workspace.map((path) => resolve(path)));
       const claudePath = values['claude-path'] ?? join(homedir(), '.local/bin/claude');
       const version = (await execute(claudePath, ['--version'], { timeout: 10_000, maxBuffer: 4096 })).stdout.match(/\b\d+\.\d+\.\d+\b/)?.[0];
-      if (!version || !supportedClaudeVersions.includes(version)) throw new DomainError('CLAUDE_VERSION_UNSUPPORTED');
+      if (!isClaudeSupported(version)) throw new DomainError('CLAUDE_VERSION_UNSUPPORTED');
       const configPath = resolve(values.config); const sourceId = stableId(ctx.config.installationId, 'claude', configPath);
       registerSource(ctx, { id: sourceId, deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, tool: 'claude', profile: 'default', configPath, version, enabled: true });
       await configureClaudeHooks(configPath, 'install', { ctx, sourceId });

@@ -9,7 +9,7 @@ import { assertRecord, DomainError, shortId, utc, type EventInput } from '../src
 import { registerProjectRoot } from '../src/core/projects.js';
 import { registerSource } from '../src/collectors/source-config.js';
 import { configureHistory, importHistory } from '../src/collectors/history.js';
-import { historyOpenCodeVersions } from '../src/collectors/opencode-history.js';
+import { isOpenCodeV2 } from '../src/collectors/plugins/opencode-projector.js';
 import { projectV2Event } from '../src/collectors/plugins/opencode-projector.js';
 import { normalizeEvent, stableId } from '../src/core/policy.js';
 
@@ -19,7 +19,7 @@ async function main() {
   shortId(values.session); utc(values.from); utc(values.to); const root = await realpath(values.root);
   const run = (...args: string[]) => execFileSync('opencode', args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] });
   const installed = run('--version').trim().replace(/^opencode v/, '');
-  if (!historyOpenCodeVersions.includes(installed)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (!isOpenCodeV2(installed)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const response = JSON.parse(run('api', 'GET', `/api/session/${values.session}`)); const info = response.data;
   if (!info || info.id !== values.session || !info.location || await realpath(info.location.directory) !== root) throw new DomainError('HISTORY_ROOT_UNAUTHORIZED');
   const raw = run('api', 'GET', `/api/experimental/session/${values.session}/log?follow=false`);
@@ -41,7 +41,7 @@ async function main() {
     records.push(projected);
   }
   const created = records.find((record) => record.type === 'session.created'); const version = (created?.data as Record<string, unknown> | undefined)?.version ?? installed;
-  if (typeof version !== 'string' || !historyOpenCodeVersions.includes(version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (!isOpenCodeV2(version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const directory = await mkdtemp(join(tmpdir(), 'worklog-v2-history-')); const ctx = await openStore(join(directory, 'data'));
   try {
     registerProjectRoot(ctx, { path: root, projectName: 'Histórico nativo delimitado', deviceId: ctx.config.deviceId });

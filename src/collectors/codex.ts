@@ -6,14 +6,18 @@ import { atomicPrivate, readPrivate } from '../core/private-files.js';
 import { captureSource, enqueueEvents, prepareCapture } from './queue.js';
 import { canonicalCodexEvent } from './codex-receipts.js';
 
-export const supportedCodexVersions = ['0.167.0'];
+/** Codex também se atualiza sozinho (0.167.0 → 0.167.2 em dois dias). Aceita 0.167.0 em diante na série 0.x; payloads seguem validados. */
+export function isCodexSupported(version: unknown): version is string {
+  const match = typeof version === 'string' ? /^0\.(\d+)\.(\d+)$/.exec(version) : null;
+  return !!match && Number(match[1]) >= 167;
+}
 export const codexHooks = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'Interrupt', 'SubagentStart', 'SubagentStop', 'PreCompact'] as const;
 type Observation = { originId: string; occurredAt: string };
 
 export function normalizeCodex(source: SourceRegistration, raw: unknown, observed: Observation = { originId: randomUUID(), occurredAt: new Date().toISOString() }): EventInput[] {
   try {
     assertRecord(raw);
-    if (source.tool !== 'codex' || !supportedCodexVersions.includes(source.version) || Buffer.byteLength(JSON.stringify(raw)) > 1024 * 1024 || !codexHooks.includes(raw.hook_event_name as never)) return [];
+    if (source.tool !== 'codex' || !isCodexSupported(source.version) || Buffer.byteLength(JSON.stringify(raw)) > 1024 * 1024 || !codexHooks.includes(raw.hook_event_name as never)) return [];
     shortId(raw.session_id); utc(observed.occurredAt);
     if (typeof raw.cwd !== 'string') return [];
     const hook = raw.hook_event_name as typeof codexHooks[number];

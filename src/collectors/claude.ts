@@ -10,7 +10,15 @@ import { captureSource, captureTaskTitles, enqueueEvents } from './queue.js';
 import { discoverProject, workspaces } from '../core/automation.js';
 import { inside } from '../core/context.js';
 
-export const supportedClaudeVersions = ['2.1.318', '2.1.319'];
+/**
+ * Claude Code se atualiza sozinho; fixar versões exatas silenciava a captura a cada atualização (2.1.322 foi
+ * recusado). Aceita a geração 2.x a partir da primeira versão validada; o payload de cada hook continua
+ * validado campo a campo, então mudanças incompatíveis descartam o evento em vez de corromper dados.
+ */
+export function isClaudeSupported(version: unknown): version is string {
+  const match = typeof version === 'string' ? /^2\.(\d+)\.(\d+)$/.exec(version) : null;
+  return !!match && (Number(match[1]) > 1 || (Number(match[1]) === 1 && Number(match[2]) >= 318));
+}
 
 export const claudeHooks = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PreCompact'] as const;
 
@@ -52,7 +60,7 @@ function claudeTask(raw: Record<string, unknown>): { status: TaskStatus; title?:
 export function normalizeClaude(source: SourceRegistration, raw: unknown, observed = { originId: randomUUID() as string, occurredAt: new Date().toISOString() }, options: { taskTitles?: boolean } = {}): EventInput[] {
   try {
     assertRecord(raw);
-    if (source.tool !== 'claude' || !supportedClaudeVersions.includes(source.version) || Buffer.byteLength(JSON.stringify(raw)) > 1024 * 1024 || typeof raw.hook_event_name !== 'string' || typeof raw.session_id !== 'string') return [];
+    if (source.tool !== 'claude' || !isClaudeSupported(source.version) || Buffer.byteLength(JSON.stringify(raw)) > 1024 * 1024 || typeof raw.hook_event_name !== 'string' || typeof raw.session_id !== 'string') return [];
     const occurredAt = raw.timestamp ?? observed.occurredAt; utc(occurredAt);
     const originId = typeof raw.event_id === 'string' ? `${raw.session_id}:${String(raw.agent_id ?? '')}:${raw.event_id}` : observed.originId;
     const common = { originId, occurredAt, nativeSessionId: raw.session_id, ...(raw.agent_id ? { nativeAgentId: raw.agent_id, parentSessionId: raw.session_id } : {}), ...(raw.cwd ? { cwd: raw.cwd } : {}) };

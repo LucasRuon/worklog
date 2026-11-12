@@ -2,9 +2,8 @@ import { assertRecord, DomainError, shortId, type AppContext, type SourceRegistr
 import { normalizeEvent } from '../core/policy.js';
 import { resolveProject } from '../core/projects.js';
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
-import { projectV2Event, v2EventTypes } from './plugins/opencode-projector.js';
+import { isOpenCodeV2, projectV2Event, v2EventTypes } from './plugins/opencode-projector.js';
 
-export const historyOpenCodeVersions = ['2.2.5', '2.2.6'];
 const ignoredTypes = new Set([
   'session.agent.selected', 'session.model.selected', 'session.renamed', 'session.metadata.updated', 'session.permissions',
   'session.viewed', 'session.archived', 'session.unarchived', 'session.deleted', 'session.forked',
@@ -37,10 +36,10 @@ function readLog(path: string) {
 /** Offline durable log: replay its context, persist only the shared allowlisted projection. */
 export function* openCodeLogRecords(ctx: AppContext, source: SourceRegistration, path: string) {
   if (source.tool !== 'opencode') throw new DomainError('HISTORY_SOURCE_MISMATCH');
-  if (!historyOpenCodeVersions.includes(source.version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (!isOpenCodeV2(source.version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const bytes = readLog(path);
   const tools = new Map<string, string>(); let sessionId: string | undefined; let cwd = ''; let parentSessionId: string | undefined;
-  const ids = new Set<string>(); const publicGaps = source.version === '2.2.6';
+  const ids = new Set<string>(); const publicGaps = source.version !== '2.2.5';
   let seq: number | undefined; let synced = false; let frames = 0;
   const authorize = (directory: unknown) => {
     if (typeof directory !== 'string' || resolveProject(ctx, source.deviceId, directory).state !== 'matched') throw new DomainError('HISTORY_ROOT_UNAUTHORIZED');
@@ -75,7 +74,7 @@ export function* openCodeLogRecords(ctx: AppContext, source: SourceRegistration,
     nativeId(raw.data.sessionID);
     if (!sessionId) {
       if (raw.type !== 'session.created' || seq > 1) throw new DomainError('HISTORY_TRUNCATED');
-      if (raw.data.version !== source.version) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+      if (!isOpenCodeV2(raw.data.version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
       sessionId = raw.data.sessionID;
       if (raw.data.parentID !== undefined) { nativeId(raw.data.parentID); parentSessionId = raw.data.parentID; }
       const location = raw.data.location as Record<string, unknown> | undefined;

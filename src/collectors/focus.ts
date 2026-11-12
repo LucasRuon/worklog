@@ -40,13 +40,17 @@ export async function probeMachine(): Promise<{ status: 'observed' | 'unavailabl
 }
 
 export function startFocusObserver(ctx: AppContext) {
-  let previousAt = Date.now(); let idle = false; let busy = false; let stopped = false; let first = true;
+  // Última amostra gravada por uma execução anterior: se o coletor caiu ou foi reiniciado, a primeira amostra
+  // trata o intervalo como pausa (como no sono) e a presença não atravessa o período sem observação.
+  const heartbeat = Number(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'focusHeartbeat'")?.value);
+  const beat = (at: number) => ctx.db.run("INSERT INTO settings VALUES ('focusHeartbeat', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", String(at));
+  let previousAt = Number.isSafeInteger(heartbeat) && heartbeat > 0 && heartbeat <= Date.now() ? heartbeat : Date.now(); let idle = false; let busy = false; let stopped = false; let first = true;
   let pending: Promise<void> = Promise.resolve();
   async function poll() {
     if (busy || stopped) return;
     busy = true;
     try {
-      if (!collectionEnabled(ctx, 'focus')) { ctx.db.run("INSERT INTO settings VALUES ('focusObservation', 'paused') ON CONFLICT(key) DO UPDATE SET value = 'paused'"); previousAt = Date.now(); return; }
+      if (!collectionEnabled(ctx, 'focus')) { ctx.db.run("INSERT INTO settings VALUES ('focusObservation', 'paused') ON CONFLICT(key) DO UPDATE SET value = 'paused'"); previousAt = Date.now(); beat(previousAt); return; }
       const signal = await probeMachine();
       if (stopped) return;
       ctx.db.run("INSERT INTO settings VALUES ('focusObservation', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", signal.status);
@@ -66,7 +70,7 @@ export function startFocusObserver(ctx: AppContext) {
         recordFocus(ctx, { ...base, eventId: randomUUID(), occurredAt: new Date(now).toISOString(), type: 'machine.resume', payload: {} });
       }
       if (signal.status === 'observed') first = false;
-      idle = inactive; previousAt = now;
+      idle = inactive; previousAt = now; beat(now);
     } finally { busy = false; }
   }
   const timer = setInterval(() => { if (!busy) pending = poll().catch(() => { /* Diagnóstico sem payload; a próxima amostra pode recuperar. */ }); }, 5000);

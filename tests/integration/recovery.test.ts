@@ -161,10 +161,15 @@ test('configurações: efeito do idle com probe controlado', async () => {
         mock.timers.tick(5000); await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 1);
         idleMs = 100; mock.timers.tick(5000); await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 2);
         mock.timers.tick(5000); await setImmediate(); assert.equal(ctx.db.get("SELECT count(*) n FROM events WHERE type = 'machine.resume'").n, 2);
+        // Coletor caiu há 1 min com o humano presente: a nova execução encerra a presença na última amostra gravada.
+        await stop(); const lastBeat = Date.now() - 60000; ctx.db.run("UPDATE settings SET value = ? WHERE key = 'focusHeartbeat'", String(lastBeat));
+        const again = startFocusObserver(ctx); await setImmediate(); await again();
+        const pause = ctx.db.all("SELECT document FROM events WHERE type = 'machine.idle'").map((row) => JSON.parse(row.document)).find((event) => event.payload.reason === 'pause');
+        assert.equal(pause.occurredAt, new Date(lastBeat).toISOString());
       } finally { await stop(); mock.timers.reset(); await ctx.shutdown(); }
     `, f.ctx.config.dataDir], { timeout: 10000, stdio: 'pipe' });
-    assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) n FROM events WHERE type = 'machine.idle'")!.n, 1);
-    // Retorno na partida e depois da ausência; amostras ativas seguidas não repetem o evento.
-    assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) n FROM events WHERE type = 'machine.resume'")!.n, 2);
+    // Ociosidade + pausa do reinício; retorno na partida, depois da ausência e no reinício.
+    assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) n FROM events WHERE type = 'machine.idle'")!.n, 2);
+    assert.equal(f.ctx.db.get<{ n: number }>("SELECT count(*) n FROM events WHERE type = 'machine.resume'")!.n, 3);
   } finally { await f.close(); }
 });

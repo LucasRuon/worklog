@@ -4,6 +4,7 @@ import { validateFilter, selectedOrigin, selectedProjects } from './filters.js';
 import { listSessions } from './sessions.js';
 import { dateInZone, nextDate, startOfDay } from './dates.js';
 import { manualTimeMs } from './manual-time.js';
+import { OPEN_END, presenceEventTypes, presenceRows } from './presence.js';
 import type { Adjustment, AppContext, Interval, ReportFilter, TimeSummary, Tool, WorkEvent } from './contracts.js';
 
 export function unionDuration(intervals: (Pick<Interval, 'start' | 'end'> & Partial<Interval>)[]): number {
@@ -14,13 +15,17 @@ export function unionDuration(intervals: (Pick<Interval, 'start' | 'end'> & Part
 }
 interface Row { id: string; kind: 'human' | 'agent'; session_id: string; project_id: string | null; device_id: string; source_id: string; tool: Tool; start_at: string; end_at: string; quality: Interval['quality'] }
 
-/** Versão da regra de dedicação; alterá-la reprocessa as janelas já projetadas. */
-export const HUMAN_RULE = 'presence-split-v1';
+/**
+ * Versão da regra de dedicação; alterá-la reprocessa as janelas já projetadas.
+ * `presence-attribution-v2` (ver `presence.ts`) vale a partir do primeiro retorno observado de cada máquina;
+ * antes disso, o histórico legado mantém as janelas por prompt/sinal de `presence-split-v1`.
+ */
+export const HUMAN_RULE = 'presence-attribution-v2';
 
 export function projectIntervals(ctx: AppContext) {
   const version = `${ctx.db.get<{ n: number }>('SELECT COALESCE(max(rowid), 0) AS n FROM events')!.n}:${HUMAN_RULE}`;
   if (ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'intervalProjection'")?.value === version) return;
-  const humanEvents = ctx.db.all<{ document: string }>("SELECT document FROM events WHERE type IN ('human.interaction', 'focus.change', 'machine.idle', 'machine.resume', 'turn.submit') AND NOT EXISTS (SELECT 1 FROM event_quality q WHERE q.event_id = events.event_id AND q.reason = 'clock-skew') ORDER BY occurred_at, origin_seq, event_id").map((row) => JSON.parse(row.document) as WorkEvent);
+  const humanEvents = ctx.db.all<{ document: string }>(`SELECT document FROM events WHERE type IN (${presenceEventTypes.map((type) => `'${type}'`).join(', ')}) AND NOT EXISTS (SELECT 1 FROM event_quality q WHERE q.event_id = events.event_id AND q.reason = 'clock-skew') ORDER BY occurred_at, origin_seq, event_id`).map((row) => JSON.parse(row.document) as WorkEvent);
   const rows: Row[] = [];
   // Por máquina, uma janela aberta por projeto: trabalho paralelo mantém janelas simultâneas.
   const active = new Map<string, Map<string, Row>>();
@@ -28,6 +33,8 @@ export function projectIntervals(ctx: AppContext) {
   // A presença só é conhecida a partir do primeiro retorno observado; antes disso, prompts contam como no histórico legado.
   const trackedFrom = new Map<string, string>();
   for (const event of humanEvents) if (event.type === 'machine.resume' && !trackedFrom.has(event.deviceId)) trackedFrom.set(event.deviceId, event.occurredAt);
+  const isTracked = (event: WorkEvent) => { const tracked = trackedFrom.get(event.deviceId); return !!tracked && event.occurredAt >= tracked; };
+  const legacy = humanEvents.filter((event) => !isTracked(event) && ['human.interaction', 'focus.change', 'machine.idle', 'machine.resume', 'turn.submit'].includes(event.type));
   const windowMs = Math.min(60 * 60_000, Math.max(1000, Number(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'humanWindowMs'")!.value)));
   const windows = (deviceId: string) => { let map = active.get(deviceId); if (!map) active.set(deviceId, map = new Map()); return map; };
   function close(row: Row, at: string) { const end = row.end_at < at ? row.end_at : at; if (end > row.start_at) rows.push({ ...row, end_at: end }); }
@@ -39,10 +46,14 @@ export function projectIntervals(ctx: AppContext) {
     const previous = map.get(key); if (previous) close(previous, event.occurredAt);
     map.set(key, { id: event.eventId, kind: 'human', session_id: '', project_id: projectId, device_id: base?.device_id ?? event.deviceId, source_id: base?.source_id ?? event.sourceId, tool: base?.tool ?? event.tool, start_at: event.occurredAt, end_at: endAt, quality: 'estimated' });
   }
-  const projectOf = (event: WorkEvent) => {
-    if (event.type === 'human.interaction' && event.payload.projectId && ctx.db.get('SELECT id FROM projects WHERE id = ?', event.payload.projectId)) return event.payload.projectId;
-    const match = event.cwd ? resolveProject(ctx, event.deviceId, event.cwd, true) : null; return match?.state === 'matched' ? match.projectId : null; };
-  for (const event of humanEvents) {
+  const resolved = new Map<string, string | null>();
+  const projectOf = (event: WorkEvent): string | null => {
+    if ((event.type === 'human.interaction' || event.type === 'focus.change') && event.payload.projectId && ctx.db.get('SELECT id FROM projects WHERE id = ?', event.payload.projectId)) return event.payload.projectId;
+    if (!event.cwd) return null;
+    const key = `${event.deviceId}\0${event.cwd}`;
+    if (!resolved.has(key)) { const match = resolveProject(ctx, event.deviceId, event.cwd, true); resolved.set(key, match.state === 'matched' ? match.projectId : null); }
+    return resolved.get(key)!; };
+  for (const event of legacy) {
     if (event.nativeAgentId) continue;
     if (event.type === 'human.interaction') {
       // Sinal explícito: "estou neste projeto agora" encerra as demais janelas da máquina.
@@ -50,8 +61,6 @@ export function projectIntervals(ctx: AppContext) {
     } else if (event.type === 'turn.submit') {
       // Prompt de sessão raiz; subagentes e prompts enviados com a máquina ociosa não indicam presença.
       if (event.parentSessionId) continue;
-      const tracked = trackedFrom.get(event.deviceId);
-      if (tracked && event.occurredAt >= tracked && away.has(event.deviceId)) continue;
       openWindow(event, projectOf(event));
     } else if (event.type === 'machine.idle') { flush(event.deviceId, event.occurredAt); away.add(event.deviceId); }
     else if (event.type === 'machine.resume') away.delete(event.deviceId);
@@ -61,7 +70,12 @@ export function projectIntervals(ctx: AppContext) {
       if (last && last.end_at > event.occurredAt) openWindow(event, event.payload.confidence === 'unresolved' ? null : event.payload.projectId ?? null, last.end_at, last);
     }
   }
-  for (const deviceId of [...active.keys()]) flush(deviceId, '9999-12-31T23:59:59.999Z');
+  // Janelas legadas param no primeiro retorno observado; dali em diante vale a presença.
+  for (const deviceId of [...active.keys()]) flush(deviceId, trackedFrom.get(deviceId) ?? '9999-12-31T23:59:59.999Z');
+  const idleMs = Number((JSON.parse(ctx.db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'operatingConfig'")?.value ?? '{}') as { idleMs?: unknown }).idleMs) || 300_000;
+  for (const row of presenceRows(humanEvents.filter(isTracked), projectOf, idleMs)) {
+    rows.push({ id: row.id, kind: 'human', session_id: '', project_id: row.projectId, device_id: row.deviceId, source_id: row.sourceId, tool: row.tool, start_at: new Date(row.start).toISOString(), end_at: row.end >= OPEN_END ? '9999-12-31T23:59:59.999Z' : new Date(row.end).toISOString(), quality: 'estimated' });
+  }
   const executions = ctx.db.all<{ id: string; session_id: string; project_id: string | null; device_id: string; source_id: string; tool: Tool; start_at: string; end_at: string }>('SELECT session_executions.id, session_id, project_id, sessions.device_id, sessions.source_id, sources.tool, start_at, end_at FROM session_executions JOIN sessions ON sessions.id = session_id JOIN sources ON sources.id = sessions.source_id');
   for (const row of executions) rows.push({ ...row, kind: 'agent', quality: 'observed' });
   ctx.db.transaction(() => {

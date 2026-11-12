@@ -8,8 +8,8 @@ import { assertRecord, DomainError, type AppContext } from '../core/contracts.js
 import { atomicPrivate } from '../core/private-files.js';
 import { stableId } from '../core/policy.js';
 import { listSources, registerSource, sourceInstalled } from '../collectors/source-config.js';
-import { claudeHooks, supportedClaudeVersions } from '../collectors/claude.js';
-import { codexHooks, supportedCodexVersions } from '../collectors/codex.js';
+import { claudeHooks, isClaudeSupported } from '../collectors/claude.js';
+import { codexHooks, isCodexSupported } from '../collectors/codex.js';
 
 const cli = fileURLToPath(new URL('../../dist/cli/index.js', import.meta.url));
 const marker = '--worklog-hook-v1';
@@ -36,7 +36,7 @@ export async function configureClaudeHooks(configPath: string, operation: 'insta
     const source = options.sourceId ? listSources(ctx).find((source) => source.id === options.sourceId) : undefined;
     const sourceId = source?.id ?? stableId(ctx.config.installationId, 'claude', configPath);
     if (source && source.configPath !== configPath) throw new DomainError('SOURCE_CONFIG_MISMATCH');
-    if (source && (source.tool !== 'claude' || !supportedClaudeVersions.includes(source.version))) throw new DomainError('UNSUPPORTED_SOURCE');
+    if (source && (source.tool !== 'claude' || !isClaudeSupported(source.version))) throw new DomainError('UNSUPPORTED_SOURCE');
     if (operation === 'install') {
       await lstat(cli).catch(() => { throw new DomainError('BUILD_REQUIRED'); });
       if (!source) registerSource(ctx, { id: sourceId, deviceId: ctx.config.deviceId, installationId: ctx.config.installationId, tool: 'claude', profile: 'default', configPath, version: '2.1.318', enabled: true });
@@ -80,7 +80,7 @@ export async function configureCodexHooks(configPath: string, operation: 'instal
   const { ctx, sourceId } = options;
   const source = listSources(ctx).find((source) => source.id === sourceId);
   if (!source || source.tool !== 'codex' || source.configPath !== configPath || source.installationId !== ctx.config.installationId) throw new DomainError('SOURCE_CONFIG_MISMATCH');
-  if (operation === 'install' && !supportedCodexVersions.includes(source.version)) throw new DomainError('CODEX_VERSION_UNSUPPORTED');
+  if (operation === 'install' && !isCodexSupported(source.version)) throw new DomainError('CODEX_VERSION_UNSUPPORTED');
   // Codex uses a shell command string, not Claude's exec-form args.
   const quote = (value: string) => {
     if (/[\x00-\x1f]/.test(value)) throw new DomainError('INVALID_PATH');

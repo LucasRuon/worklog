@@ -1,23 +1,23 @@
 import { lstatSync } from 'node:fs';
 import type { AppContext, SourceRegistration } from '../core/contracts.js';
 import { listSources, sourceControl } from './source-config.js';
-import { supportedClaudeVersions } from './claude.js';
-import { getCodexDiagnostic, supportedCodexVersions } from './codex.js';
+import { isClaudeSupported } from './claude.js';
+import { getCodexDiagnostic, isCodexSupported } from './codex.js';
 import { openCodeDiagnostic } from './opencode.js';
-import { supportedOpenCodePluginVersions } from './plugins/opencode-projector.js';
+import { isOpenCodeV2 } from './plugins/opencode-projector.js';
 
 export function sourceStatuses(ctx: AppContext, now = Date.now()) {
   return listSources(ctx).map((source) => {
     const control = sourceControl(ctx, source.id);
     const local = source.installationId === ctx.config.installationId;
-    const versions: Partial<Record<SourceRegistration['tool'], string[]>> = { claude: supportedClaudeVersions, codex: supportedCodexVersions, opencode: ['1.19.5', ...supportedOpenCodePluginVersions] };
-    const compatibility = !versions[source.tool] || versions[source.tool]!.includes(source.version) ? 'supported' as const : 'unsupported' as const;
+    const supported = source.tool === 'opencode' ? source.version === '1.19.5' || isOpenCodeV2(source.version) : source.tool === 'claude' ? isClaudeSupported(source.version) : source.tool === 'codex' ? isCodexSupported(source.version) : true;
+    const compatibility = supported ? 'supported' as const : 'unsupported' as const;
     let availability: 'present' | 'missing' | 'remote' = local ? 'missing' : 'remote';
     if (local) try { const info = lstatSync(source.configPath); if (info.isFile() || info.isDirectory()) availability = 'present'; } catch { /* Presence is not evidence of collection. */ }
     const activity = ctx.db.get<{ at: string | null; received: string | null }>('SELECT max(occurred_at) AS at, max(received_at) AS received FROM events WHERE source_id = ?', source.id);
     const lastActivity = activity?.at ?? null;
     const codex = local && source.tool === 'codex' ? getCodexDiagnostic(ctx.config.dataDir, source.id) : null;
-    const observation = source.tool === 'opencode' ? supportedOpenCodePluginVersions.includes(source.version) ? { transport: 'plugin-v2', diagnostic: null, observedFrom: null } : openCodeDiagnostic(ctx, source.id) : null;
+    const observation = source.tool === 'opencode' ? isOpenCodeV2(source.version) ? { transport: 'plugin-v2', diagnostic: null, observedFrom: null } : openCodeDiagnostic(ctx, source.id) : null;
     const remote = ctx.db.get<{ host: string; last_sync_at: string | null; last_error: string | null; clock_skew_ms: number }>('SELECT host, last_sync_at, last_error, clock_skew_ms FROM remote_hosts WHERE device_id = ?', source.deviceId);
     const lagMs = remote?.last_sync_at ? Math.max(0, now - Date.parse(remote.last_sync_at)) : null;
     const diagnostic = compatibility === 'unsupported' ? 'SOURCE_VERSION_UNSUPPORTED' : codex && codex.code !== 'CODEX_CAPTURE_OK' ? codex.code : observation?.diagnostic ?? (remote?.last_error ? 'REMOTE_SYNC_FAILED' : null);

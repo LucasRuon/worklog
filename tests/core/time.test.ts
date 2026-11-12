@@ -112,32 +112,83 @@ test('série: IA no relógio por dia e dia da semana × hora no fuso local, sem 
   } finally { await f.close(); }
 });
 
-test('dedicação por prompts: projetos paralelos dividem o tempo e ausência observada bloqueia automações', async () => {
+test('presença: projeto pelo contexto recente, paralelos divididos, ausência bloqueia automações e legado preservado', async () => {
   const f = await fixture();
   try {
     const otherRoot = join(f.directory, 'other'); await mkdir(otherRoot);
     const otherId = registerProjectRoot(f.ctx, { projectName: 'Outro', deviceId: f.ctx.config.deviceId, path: otherRoot });
-    // Histórico legado (sem retorno observado ainda): prompt conta mesmo após ociosidade.
+    // Histórico legado (sem retorno observado ainda): prompt abre a janela de 5 min mesmo após ociosidade.
     f.emit('machine.idle', '2026-11-05T08:00Z', { reason: 'idle' });
     f.emit('turn.submit', '2026-11-05T08:10Z', {}, { nativeSessionId: 'legacy' });
-    // Retorno observado inicia o acompanhamento de presença.
+    // Retorno observado inicia a presença: dali em diante conta todo o tempo na máquina, não só 5 min por prompt.
     f.emit('machine.resume', '2026-11-05T09:00Z', {});
     f.emit('turn.submit', '2026-11-05T09:00Z', {}, { nativeSessionId: 'a' });
     f.emit('turn.submit', '2026-11-05T09:02Z', {}, { nativeSessionId: 'b', cwd: otherRoot });
-    // Subagente não gera presença.
+    // Subagente não é contexto do humano.
     f.emit('turn.submit', '2026-11-05T09:03Z', {}, { nativeSessionId: 'child', parentSessionId: 'a' });
     // Ausente: prompt automático às 10:05 não conta; volta às 10:30.
     f.emit('machine.idle', '2026-11-05T10:00Z', { reason: 'lock' });
     f.emit('turn.submit', '2026-11-05T10:05Z', {}, { nativeSessionId: 'a' });
     f.emit('machine.resume', '2026-11-05T10:30Z', {});
     f.emit('turn.submit', '2026-11-05T10:31Z', {}, { nativeSessionId: 'a' });
+    f.emit('machine.idle', '2026-11-05T11:30Z', { reason: 'lock' });
     projectSessions(f.ctx, f.allEvents());
     const summary = deriveTime(f.ctx, f.filter);
-    // 08:10–08:15 (5) + 09:00–09:07 de relógio (7: 2 só A, 3 A+B divididos, 2 só B) + 10:31–10:36 (5) = 17 min, sem duplicar.
-    assert.equal(summary.humanEstimatedMs, 17 * 60_000);
-    assert.equal(deriveTime(f.ctx, { ...f.filter, projectIds: [f.projectId] }).humanEstimatedMs, 13.5 * 60_000);
-    assert.equal(deriveTime(f.ctx, { ...f.filter, projectIds: [otherId] }).humanEstimatedMs, 3.5 * 60_000);
+    // Teste: legado 5 + 09:00–09:02 (2) + metade de 09:02–09:30 (14) + 10:31–11:01 (30) = 51.
+    // Outro: metade de 09:02–09:30 (14) + 09:30–09:32 (2) = 16. Contexto expira após 30 min sem atividade.
+    assert.equal(deriveTime(f.ctx, { ...f.filter, projectIds: [f.projectId] }).humanEstimatedMs, 51 * 60_000);
+    assert.equal(deriveTime(f.ctx, { ...f.filter, projectIds: [otherId] }).humanEstimatedMs, 16 * 60_000);
+    assert.equal(summary.humanEstimatedMs, 67 * 60_000);
+    // Presente sem projeto recente: 09:32–10:00, 10:30–10:31 e 11:01–11:30 ficam visíveis como não atribuídos.
+    assert.equal(summary.unassignedHumanMs, 58 * 60_000);
+    assert.equal(summary.ruleVersion, 'presence-attribution-v2');
     assert.equal(summary.agentWallMs, 0);
+  } finally { await f.close(); }
+});
+
+test('presença: agente a noite toda sem ninguém na máquina não gera dedicação; a volta revisa a entrega', async () => {
+  const f = await fixture();
+  try {
+    f.emit('machine.resume', '2026-11-05T09:00Z', {});
+    f.emit('turn.submit', '2026-11-05T09:00Z', {}, { nativeSessionId: 'night' });
+    f.emit('turn.start', '2026-11-05T09:00Z', {}, { nativeSessionId: 'night' });
+    f.emit('turn.end', '2026-11-05T09:10Z', { outcome: 'completed' }, { nativeSessionId: 'night' });
+    // Ociosidade detectada às 09:40 com limite de 5 min: o último uso real foi 09:35.
+    f.emit('machine.idle', '2026-11-05T09:40Z', { reason: 'idle' });
+    // Agente roda 22:00–23:00 com a máquina parada.
+    f.emit('turn.start', '2026-11-05T22:00Z', {}, { nativeSessionId: 'night' });
+    f.emit('turn.end', '2026-11-05T23:00Z', { outcome: 'completed' }, { nativeSessionId: 'night' });
+    // Volta às 23:10 e revisa a entrega até o contexto expirar (23:30); depois, presença sem projeto até 23:45.
+    f.emit('machine.resume', '2026-11-05T23:10Z', {});
+    f.emit('machine.idle', '2026-11-05T23:45Z', { reason: 'lock' });
+    projectSessions(f.ctx, f.allEvents());
+    const summary = deriveTime(f.ctx, f.filter);
+    assert.equal(summary.humanEstimatedMs, (35 + 20) * 60_000);
+    assert.equal(summary.unassignedHumanMs, 15 * 60_000);
+    assert.equal(summary.agentWallMs, 70 * 60_000);
+    // Só a noite: IA trabalhou, humano não.
+    assert.equal(deriveTime(f.ctx, { ...f.filter, from: '2026-11-05T21:00:00.000Z', to: '2026-11-05T23:05:00.000Z' }).humanEstimatedMs, 0);
+  } finally { await f.close(); }
+});
+
+test('presença: sinal explícito e foco resolvem o projeto; foco ambíguo deixa sem projeto; arquivos dão contexto', async () => {
+  const f = await fixture();
+  try {
+    const otherRoot = join(f.directory, 'other'); await mkdir(otherRoot);
+    const otherId = registerProjectRoot(f.ctx, { projectName: 'Outro', deviceId: f.ctx.config.deviceId, path: otherRoot });
+    f.emit('machine.resume', '2026-11-05T09:00Z', {});
+    f.emit('file.change', '2026-11-05T09:00Z', { rootId: randomUUID(), path: 'a.ts', operation: 'edit' }, { cwd: otherRoot });
+    f.emit('turn.submit', '2026-11-05T09:05Z', {}, { nativeSessionId: 'a' });
+    f.emit('human.interaction', '2026-11-05T09:10Z', { kind: 'explicit' });
+    f.emit('focus.change', '2026-11-05T09:20Z', { confidence: 'unresolved' });
+    f.emit('focus.change', '2026-11-05T09:25Z', { confidence: 'observed', projectId: otherId }, { cwd: undefined });
+    f.emit('machine.idle', '2026-11-05T09:30Z', { reason: 'lock' });
+    projectSessions(f.ctx, f.allEvents());
+    const summary = deriveTime(f.ctx, f.filter);
+    // Teste: metade de 09:05–09:10 + 09:10–09:20 exclusivo = 12,5. Outro: 09:00–09:05 + metade + 09:25–09:30 = 12,5.
+    assert.equal(deriveTime(f.ctx, { ...f.filter, projectIds: [f.projectId] }).humanEstimatedMs, 12.5 * 60_000);
+    assert.equal(deriveTime(f.ctx, { ...f.filter, projectIds: [otherId] }).humanEstimatedMs, 12.5 * 60_000);
+    assert.equal(summary.unassignedHumanMs, 5 * 60_000);
   } finally { await f.close(); }
 });
 

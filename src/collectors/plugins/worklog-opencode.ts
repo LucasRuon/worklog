@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, join } from 'node:path';
-import { projectV2Event, supportedOpenCodePluginVersions, v2EventTypes, type PluginRecord } from './opencode-projector.js';
+import { isOpenCodeV2, projectV2Event, v2EventTypes, type PluginRecord } from './opencode-projector.js';
+import { linkedRoot } from '../../core/worktrees.js';
 
 interface PluginContext {
   app: { version: string }; location: { directory: string };
@@ -15,10 +16,10 @@ export function createWorklogPlugin(options: { nodePath: string; cliPath: string
     id: 'worklog',
     async setup(ctx: PluginContext) {
       const version = ctx.app.version.replace(/^v/, '');
-      if (!supportedOpenCodePluginVersions.includes(version)) { await ctx.storage.set('worklog.health', 'unsupported-version'); return; }
+      if (!isOpenCodeV2(version)) { await ctx.storage.set('worklog.health', 'unsupported-version'); return; }
       try {
         const manifest = JSON.parse(readFileSync(join(options.dataDir, 'capture.json'), 'utf8')) as { sources: { id: string; version: string }[] };
-        if (manifest.sources.find((source) => source.id === options.sourceId)?.version !== version) { await ctx.storage.set('worklog.health', 'source-version-mismatch'); return; }
+        if (!manifest.sources.some((source) => source.id === options.sourceId && isOpenCodeV2(source.version))) { await ctx.storage.set('worklog.health', 'source-unavailable'); return; }
       } catch { await ctx.storage.set('worklog.health', 'capture-unavailable'); return; }
       const controller = new AbortController(); let flushing = false;
       const sessions = new Map<string, { cwd: string; parentID?: string }>();
@@ -37,13 +38,15 @@ export function createWorklogPlugin(options: { nodePath: string; cliPath: string
         try {
           const cwd = realpathSync(directory);
            const config = JSON.parse(readFileSync(join(options.dataDir, 'capture.json'), 'utf8')) as { sources: { id: string; deviceId: string; enabled: boolean; version: string }[]; roots: { deviceId: string; path: string; enabled: boolean }[]; workspaces?: string[]; policy?: { excludedPaths?: string[] } };
-           const source = config.sources.find((source) => source.id === options.sourceId && source.enabled && source.version === version);
+           const source = config.sources.find((source) => source.id === options.sourceId && source.enabled && isOpenCodeV2(source.version));
           if (!source) return false;
           const contains = (parent: string) => { const path = relative(parent, cwd); return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith('../')); };
           const root = config.roots.filter((root) => root.deviceId === source.deviceId && contains(root.path)).sort((a, b) => b.path.length - a.path.length)[0];
           if (root && !root.enabled) return false;
-          const workspace = config.workspaces?.find((path) => path !== cwd && contains(path));
-          const base = root?.path ?? workspace;
+          // Worktree Git de uma raiz ativa conta como o mesmo projeto, mesmo fora da pasta da raiz.
+          const linked = root ? undefined : linkedRoot(config.roots.filter((candidate) => candidate.deviceId === source.deviceId && candidate.enabled), cwd);
+          const workspace = root || linked ? undefined : config.workspaces?.find((path) => path !== cwd && contains(path));
+          const base = root?.path ?? (linked ? cwd : workspace);
           if (!base) return false;
           const path = relative(base, cwd);
           if (config.policy?.excludedPaths?.some((excluded) => path === excluded || path.startsWith(`${excluded}/`))) return false;

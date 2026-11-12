@@ -113,7 +113,7 @@ test('Codex: rejeições e diagnóstico sem payload', async () => {
   const f = await setup();
   try {
     const raw = { ...common, cwd: f.root, hook_event_name: 'UserPromptSubmit', turn_id: 'one' };
-    assert.deepEqual(normalizeCodex({ ...f.source, version: '0.168.0' }, raw, observed), []);
+    assert.deepEqual(normalizeCodex({ ...f.source, version: '0.166.0' }, raw, observed), []);
     assert.deepEqual(normalizeCodex({ ...f.source, enabled: false }, raw, observed), []);
     for (const invalid of [{ ...raw, turn_id: undefined }, { ...raw, hook_event_name: 'NewSchema' }, { ...raw, session_id: {} }, { ...raw, prompt: 'x'.repeat(1024 * 1024) }]) {
       assert.equal(queueCodex(f.ctx.config.dataDir, f.source.id, invalid, observed), 0);

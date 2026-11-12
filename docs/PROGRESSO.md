@@ -200,6 +200,27 @@ A estimativa começa por **Registrar dedicação**, escolhendo um projeto local.
 - Trechos com projetos simultâneos, mesmo em máquinas diferentes, são divididos em partes iguais, inclusive a parte "sem projeto". O total humano nunca passa do relógio. A divisão é global, calculada antes dos filtros; antes, ambiguidade ia inteira para não atribuído.
 - Testes: `tests/core/time.test.ts` ("dedicação por prompts…" e concorrência entre máquinas atualizada) e `tests/integration/recovery.test.ts` (retorno observado).
 
+**Revisão em 12/11/2026 — regra `presence-attribution-v2`, pedida pelo usuário** (`src/core/presence.ts`). Substitui `presence-split-v1` a partir do primeiro `machine.resume` de cada máquina. O histórico anterior e as máquinas sem observação continuam com as janelas por prompt e sinal.
+
+- **Presença**: conta todo o tempo entre `machine.resume` e `machine.idle`, e não só 5 min por prompt. Ociosidade por tempo (`reason: 'idle'`) é recortada para o último uso real (`ocorrido − idleMs`). Agente rodando sem ninguém na máquina, ou computador esquecido ligado, dá zero.
+- **Projeto**: cada trecho presente vai para os projetos com atividade nos últimos 30 min (`CONTEXT_MS`). Contam como atividade: `turn.submit` raiz com presença, `turn.end` raiz (vale mesmo sem presença, porque a volta à máquina é revisão da entrega), `file.change`, `human.interaction` e `focus.change`. Projetos simultâneos dividem o trecho como antes.
+- O sinal explícito e o foco resolvido descartam os demais contextos. O foco não resolvido descarta todos.
+- Presença sem contexto vai para `unassignedHumanMs`, visível para atribuição, e não é descartada.
+- **Reinício do coletor**: o observador grava `focusHeartbeat` a cada amostra. Ao reiniciar depois de mais de 15 s sem amostra, emite `machine.idle` (`pause`) no último heartbeat, para a presença não atravessar o período sem observação.
+- Em 11/11, Posicionadas passou de 0,98 h para 3,49 h. O total do dia (5,40 h atribuídas + 0,66 h não atribuídas) fica dentro das 6,56 h de teclado e mouse ativos.
+- Testes: `tests/core/time.test.ts` (três casos "presença: …") e `tests/integration/recovery.test.ts` (pausa no reinício).
+
+**Captura em 12/11/2026 — versões e Claude Code local.** Investigação de 10/11 (Posicionadas sem IA):
+
+- **Versões fixadas**: os três agentes se atualizam sozinhos (OpenCode 2.2.6→2.2.7, Claude 2.1.319→2.1.322, Codex 0.167.0→0.167.2). As allowlists exatas foram trocadas por gerações: `isOpenCodeV2` (2.x), `isClaudeSupported` (2.x a partir de 2.1.318) e `isCodexSupported` (0.167+). Os payloads continuam validados campo a campo.
+- **Claude Code do Mac nunca foi capturado**: só a fonte do macmini existia. Na época do inventário o perfil local estava sem login. Desde 01/11 havia ~240 transcrições locais sem registro (Diamond, Posicionadas, Worklog…). As sessões Codex de 10–12/11 estavam vazias, sem prompts, então não houve perda ali.
+- **Parser `claude-transcript-v1`** (`src/collectors/claude-transcripts.ts`): lê `<config>/projects/**.jsonl` e `subagents/agent-*.jsonl` e gera os mesmos eventos e identidades dos hooks:
+  - prompt → `turn.submit` (só com origem humana) + `turn.start`; `turn.end` no último registro do assistente ou da ferramenta;
+  - `tool_use`/`tool_result` → `tool.start`/`tool.end`;
+  - subagente com `nativeAgentId`.
+
+  O turno é agrupado por `promptId`. Arquivos alterados há menos de 10 min deixam o último turno para os hooks. Pastas não autorizadas são puladas (`historyAuthorizer`, compartilhado com `opencode-db-v2`). Conteúdo nunca é persistido. Testes: `tests/collectors/claude-transcripts.test.ts`.
+
 **Tempo manual aditivo (09/11/2026, migração `015_manual_time`).** "Lançar tempo" na Visão geral registra projeto, dia local, duração (1 min a 24 h, sem datas futuras) e nota opcional. Diferente do ajuste T22, **soma** à dedicação automática, não substitui intervalos e não afeta outros projetos. Fica em `TimeSummary.humanManualMs`, no CSV/PDF ("Dedicação humana lançada manualmente") e na prévia de exportação. Entra no período quando o início do dia local está dentro do filtro. A tabela é append-only (triggers), e a remoção é feita por registro compensatório (`removes`). API: `GET/POST /api/manual-time`, `POST /api/manual-time/:id/remove`. Testes: `tests/core/manual-time.test.ts`.
 
 ### T08 — API e painel

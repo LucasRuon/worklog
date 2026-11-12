@@ -10,7 +10,7 @@ import { registerSource } from '../src/collectors/source-config.js';
 import { registerProjectRoot } from '../src/core/projects.js';
 import { stableId } from '../src/core/policy.js';
 import { configureCodexHooks } from '../src/cli/hooks.js';
-import { codexHooks, supportedCodexVersions } from '../src/collectors/codex.js';
+import { codexHooks, isCodexSupported } from '../src/collectors/codex.js';
 import { drainQueue } from '../src/collectors/claude.js';
 
 // Native discovery smoke: isolated CODEX_HOME, no auth copied and no model turn.
@@ -22,7 +22,7 @@ let child: ReturnType<typeof spawn> | undefined;
 let exit: Promise<unknown> | undefined;
 try {
   const version = execFileSync('codex', ['--version'], { encoding: 'utf8', timeout: 10_000 }).match(/\b\d+\.\d+\.\d+\b/)?.[0];
-  assert.ok(version && supportedCodexVersions.includes(version), 'CODEX_VERSION_UNSUPPORTED');
+  assert.ok(isCodexSupported(version), 'CODEX_VERSION_UNSUPPORTED');
   const configPath = join(home, 'hooks.json');
   const sourceId = stableId(ctx.config.installationId, 'codex', configPath);
   registerProjectRoot(ctx, { deviceId: ctx.config.deviceId, projectName: 'Smoke Codex', path: root });

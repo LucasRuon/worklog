@@ -124,8 +124,8 @@ test('Codex rollout: horários ausentes, falhas e interrupções não são fabri
 
 test('Codex rollout: contrato e autorização negam entradas não suportadas', async (t) => {
   const cases: [string, (f: Awaited<ReturnType<typeof setup>>) => Promise<unknown[]>][] = [
-    ['version', async (f) => [f.meta({ cli_version: '0.168.0' })]],
-    ['source-version', async (f) => { registerSource(f.ctx, { ...f.source, version: '0.168.0' }); return [f.meta()]; }],
+    ['version', async (f) => [f.meta({ cli_version: '0.166.0' })]],
+    ['source-version', async (f) => { registerSource(f.ctx, { ...f.source, version: '0.166.0' }); return [f.meta()]; }],
     ['invalid-id', async (f) => [f.meta({ id: 'not-a-native-thread', session_id: 'not-a-native-thread' })]],
     ['outside', async (f) => [f.meta({ cwd: f.directory })]],
     ['paused', async (f) => { f.ctx.db.run('UPDATE project_roots SET enabled = 0'); publishCaptureManifest(f.ctx); return [f.meta()]; }],

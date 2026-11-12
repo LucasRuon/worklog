@@ -73,13 +73,13 @@ test('plugin v2 captura pelo entrypoint compilado e não persiste eventos fora d
   });
 });
 
-test('plugin recusa runtime desconhecido e fonte de outra versão antes de assinar eventos', async () => {
+test('plugin recusa runtime fora da geração 2.x e fonte ausente antes de assinar eventos', async () => {
   const f = await fixture();
   const source = { ...f.source, id: randomUUID(), tool: 'opencode' as const, version: '2.2.5' }; registerSource(f.ctx, source);
   try {
-    for (const [version, expected] of [['2.2.7', 'unsupported-version'], ['2.2.6', 'source-version-mismatch']]) {
+    for (const [version, expected, sourceId] of [['1.19.5', 'unsupported-version', source.id], ['3.0.0', 'unsupported-version', source.id], ['2.2.7', 'source-unavailable', randomUUID()]]) {
       const stored = new Map<string, unknown>(); let subscribed = false;
-      const cleanup = await createWorklogPlugin({ nodePath: process.execPath, cliPath: join(process.cwd(), 'dist/cli/index.js'), dataDir: f.ctx.config.dataDir, sourceId: source.id }).setup({
+      const cleanup = await createWorklogPlugin({ nodePath: process.execPath, cliPath: join(process.cwd(), 'dist/cli/index.js'), dataDir: f.ctx.config.dataDir, sourceId: sourceId! }).setup({
         app: { version: version! }, location: { directory: f.root },
         storage: { async get(key) { return stored.get(key); }, async set(key, value) { stored.set(key, value); }, async remove(key) { stored.delete(key); }, async scan() { return { entries: [] }; } },
         session: { async get() { throw new Error('must not read session'); } },
@@ -131,7 +131,7 @@ test('instalador preserva identidade e versão ao atualizar e remover o plugin',
     assert.equal(removed.version, '2.2.6'); assert.equal(removed.enabled, false); assert.equal(f.allEvents().length, 1);
     assert.equal(await readFile(other, 'utf8'), 'keep');
     const unsupported = join(f.directory, 'unknown/worklog.js');
-    await assert.rejects(configureOpenCodePlugin(f.ctx, unsupported, 'install', '2.2.7'), /OPENCODE_VERSION_UNSUPPORTED/);
+    await assert.rejects(configureOpenCodePlugin(f.ctx, unsupported, 'install', '1.19.5'), /OPENCODE_VERSION_UNSUPPORTED/);
     await assert.rejects(readFile(unsupported), { code: 'ENOENT' });
     assert.equal(listSources(f.ctx).some((s) => s.configPath === unsupported), false);
   } finally { await f.close(); }
@@ -143,6 +143,26 @@ test('plugin reconhece sessão recente criada antes da ativação sem importar s
   const stored = new Map<string, unknown>();
   const cleanup = await createWorklogPlugin({ nodePath: process.execPath, cliPath: join(process.cwd(), 'dist/cli/index.js'), dataDir: f.ctx.config.dataDir, sourceId: source.id }).setup({
     app: { version: '2.2.5' }, location: { directory: f.root },
+    storage: { async get(key) { return stored.get(key); }, async set(key, value) { stored.set(key, value); }, async remove(key) { stored.delete(key); }, async scan(options) { return { entries: [...stored].filter(([key]) => key.startsWith(options.prefix)).slice(0, options.limit).map(([key, value]) => ({ key, value })) }; } },
+    session: { async get() { return { location: { directory: f.root } }; }, async list() { return { data: [{ id: 'ses_recent', location: { directory: f.root }, time: { created: Date.now() - 1000, updated: Date.now() }, title: 'SECRET' }] }; } },
+    event: { async *subscribe(options) { if (!options.signal.aborted) await new Promise<void>((resolve) => options.signal.addEventListener('abort', () => resolve(), { once: true })); } },
+  });
+  try {
+    for (let attempt = 0; stored.get('worklog.health') !== 'ok' && attempt < 60; attempt++) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(stored.get('worklog.health'), 'ok');
+    assert.equal(drainQueue(f.ctx).inserted, 1);
+    assert.equal(f.allEvents()[0]!.type, 'session.start');
+    assert.equal(JSON.stringify([...stored]).includes('SECRET'), false);
+    assert.equal(JSON.stringify(f.allEvents()).includes('SECRET'), false);
+  } finally { cleanup?.(); await f.close(); }
+});
+
+test('plugin continua capturando depois que o OpenCode se atualiza para um patch posterior ao registrado', { timeout: 10_000 }, async () => {
+  const f = await fixture();
+  const source = { ...f.source, id: randomUUID(), tool: 'opencode' as const, version: '2.2.6', configPath: `${f.source.configPath}.autoupdate` }; registerSource(f.ctx, source);
+  const stored = new Map<string, unknown>();
+  const cleanup = await createWorklogPlugin({ nodePath: process.execPath, cliPath: join(process.cwd(), 'dist/cli/index.js'), dataDir: f.ctx.config.dataDir, sourceId: source.id }).setup({
+    app: { version: 'v2.2.7' }, location: { directory: f.root },
     storage: { async get(key) { return stored.get(key); }, async set(key, value) { stored.set(key, value); }, async remove(key) { stored.delete(key); }, async scan(options) { return { entries: [...stored].filter(([key]) => key.startsWith(options.prefix)).slice(0, options.limit).map(([key, value]) => ({ key, value })) }; } },
     session: { async get() { return { location: { directory: f.root } }; }, async list() { return { data: [{ id: 'ses_recent', location: { directory: f.root }, time: { created: Date.now() - 1000, updated: Date.now() }, title: 'SECRET' }] }; } },
     event: { async *subscribe(options) { if (!options.signal.aborted) await new Promise<void>((resolve) => options.signal.addEventListener('abort', () => resolve(), { once: true })); } },

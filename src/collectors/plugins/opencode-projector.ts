@@ -2,7 +2,14 @@ export interface PluginRecord {
   originId: string; occurredAt: string; nativeSessionId: string; parentSessionId?: string; cwd: string;
   type: string; payload: Record<string, string>;
 }
-export const supportedOpenCodePluginVersions = ['2.2.5', '2.2.6'];
+/**
+ * O OpenCode se atualiza sozinho, então o contrato não é uma versão exata e sim a geração 2.x:
+ * `projectV2Event` valida o formato e descarta o que não reconhece, sem inventar eventos.
+ * Fixar patches silenciava toda a captura a cada auto-update (2.2.7 ficou 2 dias sem dados).
+ */
+export function isOpenCodeV2(version: unknown): version is string {
+  return typeof version === 'string' && /^2\.\d+\.\d+$/.test(version);
+}
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }

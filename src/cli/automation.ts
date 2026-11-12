@@ -6,11 +6,11 @@ import { atomicPrivate } from '../core/private-files.js';
 import { stableId } from '../core/policy.js';
 import { DomainError, type AppContext } from '../core/contracts.js';
 import { registerSource, listSources, sourceInstalled } from '../collectors/source-config.js';
-import { supportedOpenCodePluginVersions } from '../collectors/plugins/opencode-projector.js';
+import { isOpenCodeV2 } from '../collectors/plugins/opencode-projector.js';
 
 const owner = '// worklog-managed-opencode-v2';
 export async function configureOpenCodePlugin(ctx: AppContext, pluginPath: string, action: 'install' | 'remove', version?: string) {
-  if (action === 'install' && (!version || !supportedOpenCodePluginVersions.includes(version))) throw new DomainError('OPENCODE_VERSION_UNSUPPORTED');
+  if (action === 'install' && !isOpenCodeV2(version)) throw new DomainError('OPENCODE_VERSION_UNSUPPORTED');
   await mkdir(dirname(pluginPath), { recursive: true, mode: 0o700 });
   let previous = '';
   try { if (!(await lstat(pluginPath)).isFile()) throw new DomainError('PLUGIN_PATH_UNSAFE'); previous = await readFile(pluginPath, 'utf8'); }

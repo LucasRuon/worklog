@@ -7,6 +7,7 @@ import { validateEvent } from '../core/events.js';
 import { captureDecision, defaultPolicy } from '../core/policy.js';
 import { atomicPrivate, readPrivate } from '../core/private-files.js';
 import { gitRead, normalizeRemote } from '../core/projects.js';
+import { linkedRoot } from '../core/worktrees.js';
 
 function manifest(dataDir: string) {
   const value: unknown = JSON.parse(readPrivate(join(dataDir, 'capture.json'))); assertRecord(value);
@@ -35,10 +36,12 @@ export function prepareCapture(dataDir: string, events: EventInput[]) {
     if (!statSync(cwd).isDirectory()) throw new DomainError('CAPTURE_NOT_AUTHORIZED');
     const explicit = config.roots.filter((root) => root.deviceId === source.deviceId).sort((a, b) => b.path.length - a.path.length).find((root) => inside(root.path, cwd));
     if (explicit?.enabled === false) throw new DomainError('CAPTURE_NOT_AUTHORIZED');
-    const workspace = (config.workspaces ?? []).find((path) => path !== cwd && inside(path, cwd));
-    const root = explicit ?? (workspace ? { projectName: 'authorized', deviceId: source.deviceId, path: workspace } : null);
+    // Precedência: raiz explícita, worktree vinculado a uma raiz ativa, workspace automático.
+    const linked = explicit ? undefined : linkedRoot(config.roots.filter((root) => root.deviceId === source.deviceId && root.enabled !== false), cwd);
+    const workspace = explicit || linked ? undefined : (config.workspaces ?? []).find((path) => path !== cwd && inside(path, cwd));
+    const root = explicit ?? (linked ? { ...linked, path: cwd } : workspace ? { projectName: 'authorized', deviceId: source.deviceId, path: workspace } : null);
     if (!root || realpathSync(root.path) !== root.path || !captureDecision(root, cwd, config.policy ?? defaultPolicy).metadata) throw new DomainError('CAPTURE_NOT_AUTHORIZED');
-    if (!explicit && workspace) {
+    if (workspace) {
       let path: string;
       try { path = realpathSync(gitRead(cwd, ['rev-parse', '--show-toplevel'])); }
       catch { path = join(workspace, relative(workspace, cwd).split('/')[0]!); }

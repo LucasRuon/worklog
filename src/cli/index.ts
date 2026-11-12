@@ -10,7 +10,7 @@ import { registerProjectRoot } from '../core/projects.js';
 import { configureClaudeHooks, configureCodexHooks } from './hooks.js';
 import { registerSource } from '../collectors/source-config.js';
 import { stableId } from '../core/policy.js';
-import { queueClaude, supportedClaudeVersions } from '../collectors/claude.js';
+import { queueClaude, isClaudeSupported } from '../collectors/claude.js';
 import { synchronize } from '../server/routes.js';
 import { connectOpenCode, disconnectOpenCode, supportedOpenCodeVersion } from '../collectors/opencode.js';
 import { DomainError } from '../core/contracts.js';
@@ -19,12 +19,12 @@ import { captureSource, enqueueEvents } from '../collectors/queue.js';
 import { normalizeEvent } from '../core/policy.js';
 import { pollGit } from '../collectors/git.js';
 import { pollFiles, stopFiles } from '../collectors/files.js';
-import { queueCodex, supportedCodexVersions } from '../collectors/codex.js';
+import { queueCodex, isCodexSupported } from '../collectors/codex.js';
 import { configureHistory, exportHistory, importHistory } from '../collectors/history.js';
 import { listPullRequests, pullRequestSyncState, syncPullRequests } from '../providers/github.js';
 import { backupData, restoreData, runRetention, storageUsage } from '../core/maintenance.js';
 import { configure, operatingConfig, setRootEnabled } from '../core/configuration.js';
-import { supportedOpenCodePluginVersions } from '../collectors/plugins/opencode-projector.js';
+import { isOpenCodeV2 } from '../collectors/plugins/opencode-projector.js';
 
 const execute = promisify(execFile);
 export { defaultDataDir } from '../core/context.js';
@@ -41,7 +41,7 @@ async function main() {
   if (command === 'help') {
     console.log('Manutenção:\n  maintenance config [--config JSON]\n  maintenance backup --output /destino-novo\n  maintenance restore --input /backup --data-dir /destino-novo\n  maintenance retention\n  maintenance pause|resume --root UUID\nRestauração exige destino novo e serviço parado; não substitui base ativa.');
     console.log('GitHub (somente leitura): prs repositories | prs sync --repository-id UUID | prs list --from UTC --to UTC');
-    console.log('Histórico:\n  history configure --source-id UUID --parser normalized-v1|opencode-db-1.19.5|opencode-log-v1|codex-receipts-v1|codex-rollout-0.167.0|codex-rollout-v2-0.167.0|codex-rollout-v3-0.167.0|codex-rollout-v4-0.167.0 --input /arquivo\n  history import --source-id UUID --from UTC --to UTC [--limit 500]\n  history export --source-id UUID --from UTC --to UTC --output /arquivo.jsonl\nImportação retomável. Ctrl+C confirma somente os registros já persistidos. Rollout Codex v1: turnos raiz; v2 opt-in: também ferramentas comprovadas e filhos diretos com borda ordinal; v3 opt-in: também chamadas dinâmicas completed/success=true; v4 opt-in: também MCP completed com FunctionCall canônico correlacionado. Todos mantêm limite parcial explícito.');
+    console.log('Histórico:\n  history configure --source-id UUID --parser normalized-v1|opencode-db-1.19.5|opencode-log-v1|opencode-db-v2|claude-transcript-v1|codex-receipts-v1|codex-rollout-0.167.0|codex-rollout-v2-0.167.0|codex-rollout-v3-0.167.0|codex-rollout-v4-0.167.0 --input /arquivo\n  history import --source-id UUID --from UTC --to UTC [--limit 500]\n  history export --source-id UUID --from UTC --to UTC --output /arquivo.jsonl\nImportação retomável. Ctrl+C confirma somente os registros já persistidos. Rollout Codex v1: turnos raiz; v2 opt-in: também ferramentas comprovadas e filhos diretos com borda ordinal; v3 opt-in: também chamadas dinâmicas completed/success=true; v4 opt-in: também MCP completed com FunctionCall canônico correlacionado. Todos mantêm limite parcial explícito.');
     console.log('Codex: hooks install|remove --tool codex --config /perfil/hooks.json [--profile Nome]\nApós instalar, revise e confie nos hooks Worklog pelo /hooks do Codex. A instalação não concede confiança.');
     console.log('Worklog\n  serve [--dev] [--port 4320] [--data-dir /diretorio]\n  open [--port 4320] [--data-dir /diretorio]\n  doctor\n  project add --root /repo --name Nome [--project-id UUID] [--client Cliente]\n  hooks install|remove --config /perfil/settings.json [--profile Nome]\n  automation install|configure --workspace /pasta [--workspace /outra]\n  automation remove\n  service install|start|stop|status|remove [--central]\n  remote install --host ALIAS --node /node --workspace /projetos [--config /settings.json]\n  remote sync|status --host ALIAS\n  remote service --host ALIAS --action start|stop|status|remove\n  opencode connect --root /repo [--database /opencode.db] [--session ID] (legado 1.19.5)\n  collect\nAs opções --data-dir e --port também aceitam WORKLOG_DATA_DIR/WORKLOG_PORT.');
     return;
@@ -52,7 +52,7 @@ async function main() {
     let body = '';
     for await (const chunk of process.stdin) { body += String(chunk); if (Buffer.byteLength(body) > 64 * 1024) throw new DomainError('PLUGIN_EVENT_TOO_LARGE'); }
     const source = captureSource(dataDir, values['source-id']);
-    if (!source || source.tool !== 'opencode' || !supportedOpenCodePluginVersions.includes(source.version)) throw new DomainError('PLUGIN_SOURCE_UNSUPPORTED');
+    if (!source || source.tool !== 'opencode' || !isOpenCodeV2(source.version)) throw new DomainError('PLUGIN_SOURCE_UNSUPPORTED');
     const input: unknown = JSON.parse(body);
     if (!Array.isArray(input) || input.length < 1 || input.length > 4) throw new DomainError('PLUGIN_EVENT_INVALID');
     const events = input.flatMap((record) => normalizeEvent(source, record));
@@ -114,7 +114,7 @@ async function main() {
         if (positionals[1] === 'install') {
           const { stdout } = await execute(tool, ['--version'], { timeout: 10_000, maxBuffer: 4096 });
           const version = stdout.match(/\b\d+\.\d+\.\d+\b/)?.[0];
-          if (!version || !(tool === 'codex' ? supportedCodexVersions : supportedClaudeVersions).includes(version)) throw new DomainError(tool === 'codex' ? 'CODEX_VERSION_UNSUPPORTED' : 'UNSUPPORTED_SOURCE');
+          if (!version || !(tool === 'codex' ? isCodexSupported(version) : isClaudeSupported(version))) throw new DomainError(tool === 'codex' ? 'CODEX_VERSION_UNSUPPORTED' : 'UNSUPPORTED_SOURCE');
           registerSource(ctx, { id: sourceId, installationId: ctx.config.installationId, deviceId: ctx.config.deviceId, tool, profile: values.profile ?? 'default', configPath, version, enabled: true });
         }
         if (tool === 'codex') await configureCodexHooks(configPath, positionals[1] as 'install' | 'remove', { ctx, sourceId });

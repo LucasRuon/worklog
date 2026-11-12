@@ -6,6 +6,7 @@ import { inside } from './context.js';
 import { publishCaptureManifest } from '../collectors/source-config.js';
 import { assertRecord, exactKeys, uuid, DomainError, type AppContext, type ProjectRoot, type ProjectMatch, type Project } from './contracts.js';
 import { assignClientByNameInTransaction } from './clients.js';
+import { linkedRoot } from './worktrees.js';
 
 export function normalizeRemote(remote: string): string {
   if (typeof remote !== 'string' || remote.length > 4096 || /[\x00-\x20]/.test(remote)) throw new DomainError('INVALID_REMOTE');
@@ -86,7 +87,9 @@ export function resolveProject(ctx: AppContext, deviceId: string, cwd: string, h
   try { path = deviceId === ctx.config.deviceId ? canonicalPath(cwd) : posix.resolve(cwd); }
   catch { return { state: 'unassigned', reason: 'invalid-path' }; }
   const roots = ctx.db.all<RootRow>('SELECT * FROM project_roots WHERE device_id = ?', deviceId).sort((a, b) => b.path.length - a.path.length);
-  const root = roots.find((root) => inside(root.path, path));
+  let root = roots.find((root) => inside(root.path, path));
+  // Worktrees do mesmo repositório pertencem ao projeto, mesmo fora da pasta da raiz (só nesta máquina: o Git é local).
+  if (!root && deviceId === ctx.config.deviceId) root = linkedRoot(roots.filter((candidate) => candidate.enabled || historical), path);
   if (!root) return { state: 'unassigned', reason: 'outside-roots' };
   if (!root.enabled && !historical) return { state: 'unassigned', reason: 'paused' };
   return { state: 'matched', projectId: root.project_id, repositoryId: root.repository_id, rootId: root.id, worktree: root.worktree, reason: 'authorized-root' };

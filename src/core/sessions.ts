@@ -6,6 +6,11 @@ import type { AppContext, WorkEvent, Session, ReportFilter, Tool } from './contr
 export function sessionId(event: Pick<WorkEvent, 'sourceId' | 'nativeSessionId' | 'nativeAgentId'>) {
   return stableId(event.sourceId, 'session', event.nativeSessionId ?? '', event.nativeAgentId ?? 'main');
 }
+/**
+ * Ferramentas que só esperam a resposta do humano (pergunta, aprovação de plano). O tempo delas sai da execução
+ * do agente: um turno parado a madrugada inteira numa pergunta não é trabalho da IA.
+ */
+export const humanWaitTools = new Set(['AskUserQuestion', 'ExitPlanMode', 'question', 'request_user_input']);
 const priority: Record<string, number> = { 'session.start': 0, 'turn.submit': 1, 'turn.start': 2, 'tool.start': 3, 'tool.end': 4, 'turn.end': 5, 'session.interrupt': 6, 'session.end': 7 };
 export function orderEvents(events: WorkEvent[]) {
   return events.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || (priority[a.type] ?? 4) - (priority[b.type] ?? 4) || a.originSeq - b.originSeq || a.eventId.localeCompare(b.eventId));
@@ -33,10 +38,22 @@ export function projectSessions(ctx: AppContext, events: WorkEvent[]) {
         const projects = new Set<string>();
         const open = new Map<string, WorkEvent>();
         const spans: { id: string; start: string; end: string; kind: string; complete: boolean }[] = [];
+        const waitKeys = new Set<string>(); let waits: { start: string; end: string }[] = [];
+        // Ferramentas antes do turno: uma espera ainda aberta precisa ser descontada do turno que ela interrompe.
+        const closing = () => [...open.keys()].sort((a, b) => Number(a === 'turn') - Number(b === 'turn'));
         function end(key: string, event: WorkEvent, matched: boolean) {
           const start = open.get(key); if (!start) { complete = false; return; }
-          spans.push({ id: stableId(id, start.eventId, key), start: start.occurredAt, end: event.occurredAt, kind: key.startsWith('tool:') ? 'tool' : 'turn', complete: matched });
           open.delete(key);
+          if (waitKeys.delete(key)) { waits.push({ start: start.occurredAt, end: event.occurredAt }); return; }
+          if (key !== 'turn') { spans.push({ id: stableId(id, start.eventId, key), start: start.occurredAt, end: event.occurredAt, kind: 'tool', complete: matched }); return; }
+          // Turno sem as esperas pelo humano: cada trecho restante vira uma execução.
+          let cursor = start.occurredAt; let index = 0;
+          for (const wait of waits.filter((item) => item.end > cursor).sort((a, b) => a.start.localeCompare(b.start))) {
+            if (wait.start > cursor) spans.push({ id: stableId(id, start.eventId, key, String(index++)), start: cursor, end: wait.start < event.occurredAt ? wait.start : event.occurredAt, kind: 'turn', complete: matched });
+            if (wait.end > cursor) cursor = wait.end;
+          }
+          if (event.occurredAt > cursor) spans.push({ id: index ? stableId(id, start.eventId, key, String(index)) : stableId(id, start.eventId, key), start: cursor, end: event.occurredAt, kind: 'turn', complete: matched });
+          waits = [];
         }
         for (const event of ordered) {
           if (event.cwd) { const match = resolveProject(ctx, event.deviceId, event.cwd, true); if (match.state === 'matched') projects.add(match.projectId); }
@@ -47,12 +64,13 @@ export function projectSessions(ctx: AppContext, events: WorkEvent[]) {
               break;
             case 'turn.start': {
               if (open.has('turn')) { end('turn', event, false); complete = false; }
+              waits = [];
               open.set('turn', event); state = 'running'; endedAt = null; break;
             }
             case 'tool.start': {
               const key = `tool:${event.payload.toolUseId}`;
               if (open.has(key)) complete = false;
-              else open.set(key, event);
+              else { open.set(key, event); if (humanWaitTools.has(event.payload.toolName)) waitKeys.add(key); }
               state = 'running'; break;
             }
             case 'tool.end': end(`tool:${event.payload.toolUseId}`, event, true); if (!open.size) state = 'waiting'; break;
@@ -63,16 +81,16 @@ export function projectSessions(ctx: AppContext, events: WorkEvent[]) {
               }
               end('turn', event, true); state = event.payload.outcome === 'completed' ? 'waiting' : 'interrupted'; break;
             case 'session.interrupt':
-              for (const key of [...open.keys()]) end(key, event, false);
+              for (const key of closing()) end(key, event, false);
               state = 'interrupted'; complete = false; break;
             case 'session.end':
-              for (const key of [...open.keys()]) { end(key, event, false); complete = false; }
+              for (const key of closing()) { end(key, event, false); complete = false; }
               endedAt = event.occurredAt; state = 'closed'; break;
           }
         }
         if (open.size) {
           complete = false;
-          for (const key of [...open.keys()]) end(key, last, false);
+          for (const key of closing()) end(key, last, false);
         }
         const projectId = projects.size === 1 ? [...projects][0]! : null;
         const parent = first.parentSessionId ? stableId(first.sourceId, 'session', first.parentSessionId, 'main') : null;

@@ -1,6 +1,7 @@
 import { closeSync, constants, fstatSync, openSync, readSync, realpathSync } from 'node:fs';
 import { assertRecord, exactKeys, DomainError, shortId, uuid, type AppContext, type EventInput, type SourceRegistration } from '../core/contracts.js';
 import { resolveProject } from '../core/projects.js';
+import { isCodexSupported } from './codex.js';
 import { normalizeCodex } from './codex.js';
 
 type NativeRow = { type: string; payload: Record<string, unknown>; timestamp: string; ordinal?: number };
@@ -54,12 +55,12 @@ function readRows(path: string) {
 /** Bounded opt-in projection. Transcript contents never leave this in-memory reader. */
 export function* codexRolloutRecords(ctx: AppContext, source: SourceRegistration, path: string, expanded = false, dynamic = false, mcp = false): Generator<CodexHistoryRecord> {
   if (source.tool !== 'codex') throw new DomainError('HISTORY_SOURCE_MISMATCH');
-  if (source.version !== '0.167.0') throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (!isCodexSupported(source.version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   const { rows, truncated } = readRows(path); const first = rows[0];
   if (!first || first.type !== 'session_meta') throw new DomainError('HISTORY_FORMAT_UNSUPPORTED');
   const meta = first.payload;
   try { uuid(meta.id); } catch { throw new DomainError('HISTORY_RECORD_INVALID'); }
-  if (meta.cli_version !== source.version) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
+  if (!isCodexSupported(meta.cli_version)) throw new DomainError('HISTORY_VERSION_UNSUPPORTED');
   if (mcp && meta.history_base != null) throw new DomainError('HISTORY_LINEAGE_UNSUPPORTED');
   const child = expanded && meta.session_id !== undefined && meta.session_id !== meta.id;
   let ownRows = rows.slice(1);
