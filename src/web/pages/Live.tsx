@@ -5,9 +5,11 @@ import type { TimeSeries } from '../../core/time.js';
 import { dateInZone, nextDate, startOfDay } from '../../core/dates.js';
 import { applyTheme } from '../Shell.js';
 import { api, ApiError, duration, machineName, type Page, type Settings, type Summary } from '../api.js';
+import type { BacklogState } from '../../core/backlog.js';
+import { BacklogBadges, BacklogList, useBacklog } from './Backlog.js';
 
 const ZONE = 'America/Sao_Paulo';
-const LIVE_MS = 3000; const SUMMARY_MS = 15_000; const COLLAPSE_MS = 90_000;
+const LIVE_MS = 3000; const SUMMARY_MS = 15_000; const BACKLOG_MS = 60_000; const COLLAPSE_MS = 90_000;
 const toolNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode', git: 'Git', files: 'Arquivos', focus: 'Sinal explícito' };
 
 function todayQuery(includeUnassigned: boolean) {
@@ -143,6 +145,7 @@ export function Live({ expired }: { expired: () => void }) {
     return () => { alive = false; clearTimeout(timer); };
   }, []);
 
+  const backlog = useBacklog([], BACKLOG_MS).state;
   const projects = new Map(data?.projects.map((p) => [p.id, p]));
   const projectName = (id: string | null) => id ? projects.get(id)?.name ?? 'Projeto' : 'Sem projeto';
   const running = live?.sessions.filter((s) => s.state === 'running').length ?? 0;
@@ -166,7 +169,7 @@ export function Live({ expired }: { expired: () => void }) {
     <Totals data={data} />
     <DayRuler series={data?.series ?? null} now={now} />
     <main className="live-main">
-      <ProjectsToday data={data} live={live} open={open} toggle={toggle} />
+      <ProjectsToday data={data} live={live} backlog={backlog} open={open} toggle={toggle} />
       <section className="live-now" aria-labelledby="live-now-title">
         <h2 id="live-now-title">Agora</h2>
         {!live ? <p className="live-empty">Carregando sessões…</p>
@@ -225,7 +228,7 @@ function DayRuler({ series, now }: { series: TimeSeries | null; now: number }) {
   </section>;
 }
 
-function ProjectsToday({ data, live, open, toggle }: { data: Data | null; live: LiveState | null; open: string | null; toggle: (key: string) => void }) {
+function ProjectsToday({ data, live, backlog, open, toggle }: { data: Data | null; live: LiveState | null; backlog: BacklogState | null; open: string | null; toggle: (key: string) => void }) {
   if (!data) return <section className="live-projects"><h2>Projetos de hoje</h2><p className="live-empty">Carregando projetos…</p></section>;
   const humanOf = (t: Summary['summary']) => t.humanEstimatedMs + t.humanAdjustedMs + t.humanManualMs;
   const activeRows = data.summary.byProject.filter((p) => humanOf(p.summary) > 0 || p.summary.agentWallMs > 0 || p.sessionCount > 0);
@@ -246,6 +249,7 @@ function ProjectsToday({ data, live, open, toggle }: { data: Data | null; live: 
       <ul>{rows.map((p) => {
         const s = activity.get(p.id); const human = humanOf(p.summary); const key = `p:${p.id}`; const expanded = open === key;
         const sessions = (live?.sessions ?? []).filter((item) => item.projectId === p.id);
+        const tasks = backlog?.projects.find((item) => item.projectId === p.id);
         const files = [...new Map((live?.feed ?? []).filter((item) => item.projectId === p.id && item.type === 'file.change' && item.detail).map((item) => [item.detail!, item] as const)).values()].slice(0, 6);
         return <li key={p.id} className={expanded ? 'is-open' : ''}>
           <button type="button" className="live-project-row" aria-expanded={expanded} aria-controls={`${key}-detail`} onClick={() => toggle(key)}>
@@ -264,6 +268,7 @@ function ProjectsToday({ data, live, open, toggle }: { data: Data | null; live: 
               <div><dt>Sessões hoje</dt><dd className="tabular">{p.sessionCount}{p.summary.incompleteSessions ? ` · ${p.summary.incompleteSessions} incompletas` : ''}</dd></div>
             </dl>
             {sessions.length > 0 && <><h4>Agora</h4><ul className="live-detail-list">{sessions.map((item) => <li key={item.id}><button type="button" className="live-link-button" onClick={() => toggle(`s:${item.id}`)}>{toolNames[item.tool] ?? item.tool}{item.nativeAgentId ? ' · subagente' : ''}</button><span>{item.state === 'waiting' ? 'aguardando você' : item.task?.title ?? (item.calls[0] ? `${item.calls[0].name} em execução` : 'executando')}</span></li>)}</ul></>}
+            {tasks && <><h4>Tasks planejadas</h4><BacklogBadges counts={tasks.counts} /><BacklogList backlog={tasks} timezone={ZONE} limit={5} initialFilter={tasks.counts.total > tasks.counts.implemented ? 'open-work' : 'all'} /></>}
             {files.length > 0 && <><h4>Arquivos recentes</h4><ul className="live-detail-list">{files.map((item) => <li key={item.id}><span className="live-path">{item.detail}</span><span className="tabular">{clock(item.at)} · {outcomeLabel(item.outcome ?? '').toLowerCase()}</span></li>)}</ul></>}
             <a className="live-link-button" href={projectHref(p.id)} target="_blank" rel="noopener">Abrir projeto no Worklog<span className="sr-only"> (nova aba)</span></a>
           </div>}

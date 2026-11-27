@@ -6,6 +6,7 @@ import { PullRequestDetails, PullRequestRows } from './PullRequests.js';
 import { NoteEditor } from './Notes.js';
 import { Adjustments } from './Adjustments.js';
 import { FileCoverage, fileOperations, unavailable } from './Files.js';
+import { BacklogPanel } from './Backlog.js';
 
 interface Repository { id: string; canonical: string; sync: { lastSyncedAt: string | null; error: string | null; nextSyncAt: number } | null }
 interface DetailData { summary: { text: string; evidenceIds: string[]; ruleVersion: string }; files: Page<FileChange> & { scans: FileScan[] }; commits: Page<GitCommit>; prs: Page<PullRequestSnapshot> & { repositories: Repository[] } }
@@ -44,6 +45,7 @@ export function ProjectDetail({ id, data, query, updated, back, openSession, ope
     <section className="panel"><div className="section-heading"><div><h2>Histórico do projeto</h2><p>{project?.name ?? 'Projeto'} · {project?.client ?? 'Sem cliente associado'}</p></div><button className="button-flat" onClick={back}>Voltar aos projetos</button></div>
       <div className="instructions">{project?.roots.map((root) => <p key={root.id}><code>{root.path}</code> · {machineName(data.settings, root.deviceId)}{!root.enabled && ' · raiz pausada'}</p>)}<p className="muted">Todos os blocos usam os filtros acima. Links explícitos podem abrir evidências relacionadas fora do recorte, com origem identificada.</p></div>
     </section>
+    <BacklogPanel projectId={id} timezone={data.settings.timezone} updated={updated} />
     <section className="panel"><div className="instructions"><NoteEditor targetId={id} timezone={data.settings.timezone} from={new URLSearchParams(query).get('from')!} changed={refresh} /></div></section>
     <Adjustments projectId={id} query={query} changed={refresh} />
     {error && <p role="alert" className="error-banner">{error} {detail && 'As evidências abaixo podem estar desatualizadas.'}<button onClick={() => setRevision((n) => n + 1)}>Tentar novamente</button></p>}
