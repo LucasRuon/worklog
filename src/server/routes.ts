@@ -7,6 +7,7 @@ import { listProjects, registerProjectRoot } from '../core/projects.js';
 import { listSessions, projectSessions, rebuildSessions } from '../core/sessions.js';
 import { deriveSeries, deriveTime } from '../core/time.js';
 import { liveState } from '../core/live.js';
+import { backlogState } from '../core/backlog.js';
 import { addManualTime, listManualTime, removeManualTime } from '../core/manual-time.js';
 import { createClient, listClients, removeClient, renameClient, setProjectClient } from '../core/clients.js';
 import { controlSource, registerSource } from '../collectors/source-config.js';
@@ -149,6 +150,7 @@ export async function handleRoutes(ctx: AppContext, req: IncomingMessage, res: S
     const manualRemove = path.match(/^\/api\/manual-time\/([^/]+)\/remove$/);
     if (manualRemove && method === 'POST') { removeManualTime(ctx, manualRemove[1]!); json(res, 200, { removed: true }); return; }
     if (path === '/api/live' && method === 'GET') { const filter = filterFromUrl(ctx, url); json(res, 200, liveState(ctx, filter, eventsQuery(ctx, filter), operatingConfig(ctx).captureTaskTitles)); return; }
+    if (path === '/api/backlog' && method === 'GET') { json(res, 200, backlogState(ctx, url.searchParams.get('projectIds')?.split(',').filter(Boolean) ?? [])); return; }
     if (path === '/api/summary/series' && method === 'GET') { json(res, 200, deriveSeries(ctx, filterFromUrl(ctx, url))); return; }
     if (path === '/api/work-summary' && method === 'GET') { json(res, 200, buildWorkSummary(ctx, filterFromUrl(ctx, url))); return; }
     if (path === '/api/prs/sync' && method === 'POST') {
